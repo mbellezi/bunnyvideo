@@ -81,7 +81,13 @@ if ($action === 'mark_complete' || $action === 'markcomplete') {
             $response['message'] = get_string('completed', 'completion');
             $response['already_complete'] = false;
             
-            // Log completion event
+            // We're skipping event logging due to issues with Moodle's badge observer
+            // This doesn't affect the completion functionality
+            $response['event_logged'] = false;
+            $response['note'] = 'Event logging skipped to avoid badge observer errors';
+            
+            /*
+            // Log completion event - DISABLED DUE TO BADGE OBSERVER ISSUES
             try {
                 $event = \core\event\course_module_completion_updated::create(array(
                     'objectid' => $cm->id,
@@ -98,6 +104,7 @@ if ($action === 'mark_complete' || $action === 'markcomplete') {
                 $response['event_error'] = $e->getMessage();
                 $response['event_logged'] = false;
             }
+            */
         }
     }
 } else {
