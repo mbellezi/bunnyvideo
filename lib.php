@@ -32,33 +32,53 @@ function bunnyvideo_view($bunnyvideo, $cm, $context, $options=null) {
     // Prepare data for JavaScript
     $jsdata = [
         'cmid' => $cm->id,
+        'bunnyvideoid' => $bunnyvideo->id,
         'completionPercent' => $bunnyvideo->completionpercent > 0 ? (int)$bunnyvideo->completionpercent : 0,
         'contextid' => $context->id,
     ];
 
-    // Include Player.js library from CDN
-    $PAGE->requires->js(new moodle_url('https://cdn.playerjs.com/v2/playerjs.js'), true);
-
-    // Include our AMD JavaScript module
-    $PAGE->requires->js_call_amd('mod_bunnyvideo/player_handleri', 'init', [$jsdata]);
-
     // --- Geração do HTML usando $OUTPUT (Renderer Padrão) ---
-
+    $html = '';
+    
+    // Embed the Player.js script directly in the HTML output
+    $html .= '<script src="https://assets.mediadelivery.net/playerjs/player-0.1.0.min.js"></script>';
+    
+    // Then add our handler script - this ensures proper order
+    $html .= '<script src="'.$CFG->wwwroot.'/mod/bunnyvideo/js/player_handler.js?v='.time().'"></script>';
+    
+    // Only initialize after everything is loaded
+    $html .= '<script>
+        document.addEventListener("DOMContentLoaded", function() {
+            // Make sure everything is available
+            if (typeof BunnyVideoHandler !== "undefined") {
+                console.log("BunnyVideo: Initializing handler after DOM loaded");
+                BunnyVideoHandler.init('.json_encode($jsdata).');
+            } else {
+                console.error("BunnyVideo: Handler not found even after direct embedding");
+            }
+        });
+    </script>';
+    
     // Formata o nome e a introdução
     $name = format_string($bunnyvideo->name, true, ['context' => $context]);
     $intro = format_module_intro('bunnyvideo', $bunnyvideo, $cm->id);
-
+    
     // Formata o embed code (com cuidado - veja notas anteriores sobre segurança/confiança)
     $embedcode_html = format_text($bunnyvideo->embedcode, FORMAT_HTML, ['trusted' => true, 'noclean' => true, 'context' => $context]);
 
     // Monta o conteúdo HTML usando $OUTPUT e html_writer
     $content = '';
     $content .= $OUTPUT->box_start('generalbox boxaligncenter mod_bunnyvideo_content', 'bunnyvideocontent-'.$bunnyvideo->id); // ID único para o container geral
-    if ($intro) { // Mostra a introdução apenas se ela existir
+    if (trim(strip_tags($intro))) {
          $content .= $OUTPUT->box($intro, 'mod_introbox'); // Caixa para a introdução
     }
+    
     // Adiciona um wrapper DIV com ID único para o JS encontrar o iframe facilmente
-    $content .= html_writer::div($embedcode_html, 'bunnyvideo-player-wrapper', ['id' => 'bunnyvideo-player-' . $bunnyvideo->id]);
+    $content .= '<div id="bunnyvideo-player-' . $bunnyvideo->id . '" class="bunnyvideo-player-wrapper">';
+    $content .= $html; // Add our scripts before the embed code
+    $content .= $embedcode_html;
+    $content .= '</div>';
+    
     $content .= $OUTPUT->box_end();
 
     // Retorna o HTML gerado
