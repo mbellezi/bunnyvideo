@@ -30,6 +30,17 @@ require_once($CFG->libdir . '/completionlib.php');
 $action = required_param('action', PARAM_ALPHA);
 $cmid = required_param('cmid', PARAM_INT);
 
+// Debug output for troubleshooting
+$response = array('success' => false, 'message' => '');
+$response['debug'] = array(
+    'received_action' => $action,
+    'action_type' => gettype($action),
+    'received_cmid' => $cmid,
+    'method' => $_SERVER['REQUEST_METHOD'],
+    'post_data' => $_POST,
+    'raw_input' => file_get_contents('php://input')
+);
+
 // Require a valid session key
 require_sesskey();
 
@@ -46,9 +57,8 @@ $PAGE->set_context($context);
 require_login($course, false, $cm);
 
 // Prepare response
-$response = array('success' => false, 'message' => '');
 
-if ($action === 'mark_complete') {
+if ($action === 'mark_complete' || $action === 'markcomplete') {
     // Check if completion is enabled for this course and module
     $completion = new completion_info($course);
     
@@ -72,16 +82,22 @@ if ($action === 'mark_complete') {
             $response['already_complete'] = false;
             
             // Log completion event
-            $event = \core\event\course_module_completion_updated::create(array(
-                'objectid' => $cm->id,
-                'context' => $context,
-                'relateduserid' => $USER->id,
-                'other' => array(
+            try {
+                $event = \core\event\course_module_completion_updated::create(array(
+                    'objectid' => $cm->id,
+                    'context' => $context,
                     'relateduserid' => $USER->id,
-                    'completionstate' => COMPLETION_COMPLETE
-                )
-            ));
-            $event->trigger();
+                    'other' => array(
+                        'completionstate' => COMPLETION_COMPLETE
+                    )
+                ));
+                $event->trigger();
+                $response['event_logged'] = true;
+            } catch (Exception $e) {
+                // Don't let event logging failure prevent completion marking
+                $response['event_error'] = $e->getMessage();
+                $response['event_logged'] = false;
+            }
         }
     }
 } else {

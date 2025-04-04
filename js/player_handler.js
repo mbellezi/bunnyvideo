@@ -58,41 +58,56 @@ window.BunnyVideoHandler = {
         
         // Use standard fetch for AJAX call
         var ajaxUrl = M.cfg.wwwroot + '/mod/bunnyvideo/ajax.php';
-        var formData = new FormData();
-        formData.append('action', 'mark_complete');
-        formData.append('cmid', this.config.cmid);
-        formData.append('sesskey', M.cfg.sesskey);
+        
+        // Use URLSearchParams for simpler serialization compatible with PHP's $_POST
+        var params = new URLSearchParams();
+        params.append('action', 'mark_complete');
+        params.append('cmid', this.config.cmid);
+        params.append('sesskey', M.cfg.sesskey);
         
         bunnyVideoLog('Sending completion request to: ' + ajaxUrl, null, 'info');
-        bunnyVideoLog('With params: action=mark_complete, cmid=' + this.config.cmid, null, 'debug');
+        bunnyVideoLog('With params: ' + params.toString(), null, 'debug');
         
-        fetch(ajaxUrl, {
-            method: 'POST',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest'
-            },
-            body: formData
-        })
-        .then(function(response) {
-            bunnyVideoLog('AJAX response received, status: ' + response.status, null, 'debug');
-            return response.json();
-        })
-        .then(function(data) {
-            if (data.success) {
-                if (data.already_complete) {
-                    bunnyVideoLog('Activity was already marked as complete', null, 'info');
-                } else {
-                    bunnyVideoLog('Activity was just marked as complete', null, 'success');
+        // Try with XMLHttpRequest which is more compatible with Moodle
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', ajaxUrl, true);
+        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        
+        var self = this;
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                bunnyVideoLog('AJAX response received, status: 200', null, 'debug');
+                try {
+                    var data = JSON.parse(xhr.responseText);
+                    bunnyVideoLog('Parsed AJAX response:', data, 'debug');
+                    
+                    if (data.success) {
+                        if (data.already_complete) {
+                            bunnyVideoLog('Activity was already marked as complete', null, 'info');
+                        } else {
+                            bunnyVideoLog('Activity was just marked as complete', null, 'success');
+                        }
+                    } else {
+                        bunnyVideoLog('AJAX call failed: ' + (data.message || 'No message'), data, 'error');
+                        self.completionSent = false;
+                    }
+                } catch (e) {
+                    bunnyVideoLog('Error parsing AJAX response:', e, 'error');
+                    self.completionSent = false;
                 }
             } else {
-                bunnyVideoLog('AJAX call failed: ' + (data.message || 'No message'), null, 'error');
-                window.BunnyVideoHandler.completionSent = false;
+                bunnyVideoLog('AJAX request failed with status: ' + xhr.status, null, 'error');
+                self.completionSent = false;
             }
-        })
-        .catch(function(error) {
-            bunnyVideoLog('AJAX error:', error, 'error');
-            window.BunnyVideoHandler.completionSent = false;
-        });
+        };
+        
+        xhr.onerror = function() {
+            bunnyVideoLog('AJAX network error occurred', null, 'error');
+            self.completionSent = false;
+        };
+        
+        xhr.send(params.toString());
         
         // Also show a visual indicator
         this.showCompletionIndicator();
