@@ -1,0 +1,20 @@
+<div class="bunnyvideo-activity">
+    {{#intro}}
+        <div class="bunnyvideo-introbox generalbox boxaligncenter">
+            {{{intro}}}
+        </div>
+    {{/intro}}
+
+    <div class="bunnyvideo-player-wrapper" id="bunnyvideo-player-{{instanceid}}" data-region="bunnyvideo-player-container">
+        {{{embedcode}}}
+    </div>
+    <div class="bunnyvideo-loading" data-region="bunnyvideo-loading" style="display: none;">
+         {{#str}}player_loading, mod_bunnyvideo{{/str}}
+    </div>
+
+</div>
+{{#js}}
+    require(['mod_bunnyvideo/player_handler'], function(Handler) {
+        Handler.init({{{jsdata}}});
+    });
+{{/js}}
