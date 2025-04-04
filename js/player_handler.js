@@ -3,6 +3,15 @@
  * Using plain JS without any module system to avoid conflicts with RequireJS.
  */
 
+// Debug configuration - modify these values to control logging and debug UI
+var BunnyVideoDebugConfig = {
+    // Debug level: 0=none, 1=errors only, 2=important (errors+success), 3=all logs
+    debugLevel: 1,
+    
+    // Show debug UI elements like the manual completion button
+    showDebugUI: false
+};
+
 // Simple debug logging helper with levels - always show important messages
 function bunnyVideoLog(msg, data, level) {
     level = level || 'info';
@@ -22,10 +31,24 @@ function bunnyVideoLog(msg, data, level) {
         var isImportant = level === 'error' || level === 'success' || 
                           level === 'warn' || msg.indexOf('Complete') !== -1;
         
-        // Set this to true to enable all debugging
-        var debugMode = true;
+        // Determine if we should log based on debug level
+        var shouldLog = false;
         
-        if (isImportant || debugMode) {
+        // Level 0: No logging
+        // Level 1: Errors only
+        if (BunnyVideoDebugConfig.debugLevel >= 1 && level === 'error') {
+            shouldLog = true;
+        }
+        // Level 2: Important logs (errors, warnings, success)
+        else if (BunnyVideoDebugConfig.debugLevel >= 2 && isImportant) {
+            shouldLog = true;
+        }
+        // Level 3: All logs
+        else if (BunnyVideoDebugConfig.debugLevel >= 3) {
+            shouldLog = true;
+        }
+        
+        if (shouldLog) {
             if (data !== undefined) {
                 console.log(message, data);
             } else {
@@ -272,7 +295,7 @@ window.BunnyVideoHandler = {
             var indicator = document.createElement('div');
             indicator.id = 'bunny-completion-indicator';
             indicator.style.cssText = 'position:absolute; top:10px; right:10px; background-color:rgba(0,128,0,0.8); color:white; padding:8px 12px; border-radius:4px; font-size:14px; z-index:1000; transition:opacity 0.5s; box-shadow: 0 2px 4px rgba(0,0,0,0.2);';
-            indicator.innerHTML = '✓ ' + (M.str.completion ? M.str.completion.completion_y : 'Completed');
+            indicator.innerHTML = '✓ ' + (M.str.completion ? M.str.completion.completion_y : 'Atividade Completada');
             
             container.style.position = 'relative';
             container.appendChild(indicator);
@@ -298,6 +321,11 @@ window.BunnyVideoHandler = {
         
         // Log all parameters to help with debugging
         bunnyVideoLog('Initializing player with config:', this.config, 'info');
+        
+        if (!this.config || !this.config.cmid) {
+            bunnyVideoLog('Invalid configuration', null, 'error');
+            return;
+        }
         
         // Try both potential container IDs
         var containerIds = [
@@ -478,6 +506,11 @@ window.BunnyVideoHandler = {
     // Add a debug button for manually triggering completion (only in dev/test)
     addDebugButton: function(container) {
         try {
+            // Only add debug button if debug UI is enabled
+            if (!BunnyVideoDebugConfig.showDebugUI) {
+                return;
+            }
+            
             var self = this;
             var debugButton = document.createElement('button');
             debugButton.textContent = 'DEBUG: Mark Complete';
