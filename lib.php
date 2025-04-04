@@ -13,20 +13,36 @@ require_once($CFG->libdir.'/completionlib.php');
  * @return string HTML output for the activity page.
  */
 function bunnyvideo_view($bunnyvideo, $cm, $context, $options=null) {
-    global $CFG, $PAGE, $OUTPUT, $USER; // $OUTPUT é o renderer padrão que usaremos
+    global $CFG, $PAGE, $OUTPUT, $USER, $DB; // Added $DB global
 
-    // Trigger course_module_viewed event. Standard Moodle logging.
-    $event = \mod_bunnyvideo\event\course_module_viewed::create(array(
-        'objectid' => $bunnyvideo->id,
-        'context' => $context,
-        'other' => array('userid' => $USER->id)
-    ));
-    $event->add_record_snapshot('course_modules', $cm);
-    $event->add_record_snapshot('bunnyvideo', $bunnyvideo);
-    $event->trigger();
+    // Get the course data - needed for record snapshots
+    $course = $DB->get_record('course', array('id' => $cm->course), '*', MUST_EXIST);
+
+    try {
+        // Trigger course_module_viewed event. Standard Moodle logging.
+        $event = \mod_bunnyvideo\event\course_module_viewed::create(array(
+            'objectid' => $bunnyvideo->id,
+            'context' => $context,
+            'other' => array('userid' => $USER->id)
+        ));
+        
+        // Add record snapshots with error handling
+        try {
+            $event->add_record_snapshot('course', $course);
+            $event->add_record_snapshot('course_modules', $cm);
+            $event->add_record_snapshot('bunnyvideo', $bunnyvideo);
+            $event->trigger();
+        } catch (Exception $e) {
+            // Log error but continue - don't let event failure prevent viewing
+            debugging('Error in event logging: ' . $e->getMessage(), DEBUG_DEVELOPER);
+        }
+    } catch (Exception $e) {
+        // Just log error but continue loading the page
+        debugging('Error creating event: ' . $e->getMessage(), DEBUG_DEVELOPER);
+    }
 
     // Completion: Mark as viewed (if completion is set to 'view')
-    $completion = new completion_info($cm->course);
+    $completion = new completion_info($course);
     $completion->set_module_viewed($cm);
 
     // Prepare data for JavaScript
@@ -112,13 +128,10 @@ function bunnyvideo_add_instance($bunnyvideo, $mform) {
 
     // Process completion settings saved by standard_completion_elements
     $cmid = $bunnyvideo->coursemodule; // Passed in $bunnyvideo by moodleform_mod
-    // Ensure completion data is correctly updated based on form settings
-     if ($cm = get_coursemodule_from_id('bunnyvideo', $cmid)) {
-         $completion = new completion_info($cm->course);
-         $completion->update_completion_rules($cm, $bunnyvideo); // Let Moodle handle standard rules update
-     } else {
-        // Log error or throw exception if cmid is invalid?
-     }
+    
+    // NOTE: Removed call to completion->update_completion_rules which isn't available
+    // Moodle will automatically handle the standard completion settings
+    // The completionpercent field is stored in our bunnyvideo table and used by our JS
 
     return $bunnyvideo->id;
 }
@@ -142,14 +155,10 @@ function bunnyvideo_update_instance($bunnyvideo, $mform) {
 
     // Process completion settings saved by standard_completion_elements
     $cmid = $bunnyvideo->coursemodule; // Passed in $bunnyvideo by moodleform_mod
-     // Ensure completion data is correctly updated based on form settings
-     if ($cm = get_coursemodule_from_id('bunnyvideo', $cmid)) {
-         $completion = new completion_info($cm->course);
-         $completion->update_completion_rules($cm, $bunnyvideo); // Let Moodle handle standard rules update
-     } else {
-         // Log error or throw exception if cmid is invalid?
-     }
-
+    
+    // NOTE: Removed call to completion->update_completion_rules which isn't available 
+    // Moodle will automatically handle the standard completion settings
+    // The completionpercent field is stored in our bunnyvideo table and used by our JS
 
     return $result;
 }
@@ -185,9 +194,12 @@ function bunnyvideo_supports($feature) {
         case FEATURE_BACKUP_MOODLE2:        return true;
         case FEATURE_COMPLETION_TRACKS_VIEWS: return true; // Supports "view" completion
         case FEATURE_COMPLETION_HAS_RULES:  return true; // Supports automatic completion rules (our JS handles one)
+        case FEATURE_MODEDIT_DEFAULT_COMPLETION: return COMPLETION_TRACKING_AUTOMATIC; // Default to automatic completion
+        case FEATURE_GRADE_HAS_GRADE:     return false; // No grading implemented 
+        case FEATURE_RATE:                 return false; // No rating
+        // FEATURE_COMPLETION_MANUAL_ALLOWED is not available in this version of Moodle
+        // We'll handle preventing manual completion in the mod_form.php file
         case FEATURE_MOD_PURPOSE:           return MOD_PURPOSE_CONTENT; // Describe module purpose
-        // case FEATURE_GRADE_HAS_GRADE:    return false; // No grading implemented
-        // case FEATURE_ADVANCED_GRADING:   return false; // No advanced grading
         default:                              return null;
     }
 }

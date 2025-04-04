@@ -45,16 +45,17 @@ class mod_bunnyvideo_mod_form extends moodleform_mod {
         // 'completion' é o nome do elemento padrão que o Moodle adiciona para o controle principal da conclusão.
         $mform->disabledIf('completionpercent', 'completion', 'eq', COMPLETION_TRACKING_NONE);
 
-
         //-------------------------------------------------------------------------------
         // Elementos padrão do Moodle para módulos (visibilidade, grupos, etc.)
         // Esta chamada é importante e deve permanecer.
         $this->standard_coursemodule_elements();
-
-        //-------------------------------------------------------------------------------
-        // REMOVIDO: A chamada abaixo estava incorreta e não existe.
-        // O Moodle adiciona a seção de conclusão automaticamente com base no suporte em lib.php
-        // $this->standard_completion_elements(); // <<< LINHA REMOVIDA!
+        
+        // Add warning message about automatic completion only
+        $mform->addElement('static', 'completioninfo', '', 
+            '<div class="alert alert-info">'.
+            'A conclusão manual pelo usuário não está disponível para atividades Bunny Video. '.
+            'A conclusão será marcada automaticamente quando o vídeo for assistido até a porcentagem configurada.'.
+            '</div>');
 
         //-------------------------------------------------------------------------------
         // Botões de ação (Salvar e voltar, Salvar e mostrar, Cancelar)
