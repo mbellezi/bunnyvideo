@@ -437,7 +437,19 @@ window.BunnyVideoHandler = {
             var indicator = document.createElement('div');
             indicator.id = 'bunny-completion-indicator';
             indicator.style.cssText = 'position:absolute; top:10px; right:10px; background-color:rgba(0,128,0,0.8); color:white; padding:8px 12px; border-radius:4px; font-size:14px; z-index:1000; transition:opacity 0.5s; box-shadow: 0 2px 4px rgba(0,0,0,0.2);';
-            indicator.innerHTML = '✓ ' + (M.str.completion ? M.str.completion.completion_y : 'Atividade Completada');
+            
+            // Verificar se as strings do Moodle estão disponíveis e usar fallback apropriado
+            var completionText = 'Atividade Completada';
+            try {
+                if (typeof M !== 'undefined' && M.str && M.str.completion && M.str.completion.completion_y) {
+                    completionText = M.str.completion.completion_y;
+                }
+                // Não usar M.util.get_string pois está retornando o placeholder
+            } catch (e) {
+                bunnyVideoLog('Erro ao obter string de conclusão:', e, 'warn');
+            }
+            
+            indicator.innerHTML = '✓ ' + completionText;
             
             container.style.position = 'relative';
             container.appendChild(indicator);
