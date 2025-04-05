@@ -21,7 +21,14 @@ function initCompletionToggle() {
             // Get data attributes
             const cmid = this.getAttribute('data-cmid');
             const userid = this.getAttribute('data-userid');
-            const newstate = this.getAttribute('data-newstate');
+            let newstate = this.getAttribute('data-newstate');
+            
+            // Ensure newstate is explicitly set to 0 for marking as incomplete
+            if (newstate === '0') {
+                newstate = 0;
+            } else {
+                newstate = 1;
+            }
             
             // Disable button and show loading state
             this.disabled = true;
@@ -43,21 +50,30 @@ function initCompletionToggle() {
  * @param {string} originalText - Original button text
  */
 function toggleCompletion(cmid, userid, newstate, button, originalText) {
+    // Assegurar que os valores sejam numéricos e não strings
+    const cmidInt = parseInt(cmid, 10);
+    const useridInt = parseInt(userid, 10);
+    const newstateInt = parseInt(newstate, 10);
+    
+    console.log('BunnyVideo - Toggle Completion - cmid:', cmidInt, 'userid:', useridInt, 'newstate:', newstateInt);
+    
     // Prepare the request
     const request = {
         methodname: 'mod_bunnyvideo_toggle_completion',
         args: {
-            cmid: parseInt(cmid),
-            userid: parseInt(userid),
-            newstate: parseInt(newstate)
+            cmid: cmidInt,
+            userid: useridInt,
+            newstate: newstateInt
         }
     };
     
     // Use Moodle's AJAX framework
     require(['core/ajax'], function(ajax) {
         ajax.call([request])[0].done(function(response) {
+            console.log('BunnyVideo - Toggle Response:', response);
             if (response.success) {
                 // Success - reload the page to show updated status
+                console.log('BunnyVideo - Operação bem-sucedida, recarregando página');
                 window.location.reload();
             } else {
                 // Error - restore button and show error

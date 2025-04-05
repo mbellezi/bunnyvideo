@@ -115,84 +115,83 @@ class completion_ajax extends \external_api {
      * @return array Success status and optional message.
      */
     public static function toggle_completion($cmid, $userid, $newstate) {
-        global $USER, $DB;
+        global $DB, $CFG;
 
         // Validate parameters.
-        $params = self::validate_parameters(self::toggle_completion_parameters(), 
-            array('cmid' => $cmid, 'userid' => $userid, 'newstate' => $newstate));
+        $params = self::validate_parameters(self::toggle_completion_parameters(), array(
+            'cmid' => $cmid,
+            'userid' => $userid,
+            'newstate' => $newstate
+        ));
 
-        // Get context and check capabilities.
+        // Get course module, context and course.
         $cm = get_coursemodule_from_id('bunnyvideo', $params['cmid'], 0, false, MUST_EXIST);
-        $course = $DB->get_record('course', array('id' => $cm->course), '*', MUST_EXIST);
         $context = \context_module::instance($cm->id);
         self::validate_context($context);
+        $course = $DB->get_record('course', array('id' => $cm->course), '*', MUST_EXIST);
 
-        // Check if user has capability to manage completion
+        // Check capabilities to toggle completion for another user.
         require_capability('mod/bunnyvideo:managecompletion', $context);
 
-        // Get activity instance
-        $bunnyvideo = $DB->get_record('bunnyvideo', array('id' => $cm->instance), '*', MUST_EXIST);
-
-        // Check if completion is enabled for this activity
+        // Get completion info.
         $completion = new \completion_info($course);
         if (!$completion->is_enabled($cm)) {
             return array(
                 'success' => false,
-                'message' => get_string('error_cannotmarkcomplete', 'mod_bunnyvideo') . ' (Completion not enabled)'
+                'message' => get_string('completionnotenabled', 'completion')
             );
         }
 
-        // Forçar conversão para inteiro do newstate
-        $newstate = (int)$params['newstate'];
-        
-        // Log debugging (registrar valores para ajudar a diagnosticar o problema)
-        debugging('BunnyVideo toggle_completion - cmid: ' . $params['cmid'] . 
+        // Debug logs para verificar o que está sendo enviado
+        debugging('BunnyVideo - Toggle solicitado - cmid: ' . $params['cmid'] . 
                  ', userid: ' . $params['userid'] . 
-                 ', newstate: ' . $newstate, DEBUG_DEVELOPER);
+                 ', newstate: ' . $params['newstate'], DEBUG_DEVELOPER);
 
         // Verificar o estado atual de conclusão
-        $currentdata = $completion->get_data($cm, false, $params['userid']);
-        debugging('BunnyVideo - Estado atual: ' . $currentdata->completionstate, DEBUG_DEVELOPER);
+        $currentdata = $completion->get_data($cm, true, $params['userid']); // Forçar recarregamento
+        debugging('BunnyVideo - Estado atual: ' . $currentdata->completionstate . 
+                 ' - Tentando alterar para: ' . $params['newstate'], DEBUG_DEVELOPER);
 
         // Map the newstate parameter to Moodle completion constants
-        $completionstate = ($newstate == 1) ? COMPLETION_COMPLETE : COMPLETION_INCOMPLETE;
+        $completionstate = ($params['newstate'] == 1) ? COMPLETION_COMPLETE : COMPLETION_INCOMPLETE;
         
-        // Usar abordagem diferente para marcar como incompleto
+        // Estratégia explícita para marcar como incompleto
         if ($completionstate == COMPLETION_INCOMPLETE) {
             try {
-                // Primeiro, tentar a abordagem oficial da API
-                $completion->update_state($cm, $completionstate, $params['userid']);
+                debugging('BunnyVideo - INICIANDO processo para marcar como INCOMPLETO', DEBUG_DEVELOPER);
                 
-                // Verificar se funcionou, consultando o estado atual
-                $checkdata = $completion->get_data($cm, true, $params['userid']); // true = recarregar do db
+                // IMPORTANTE: Precisamos GARANTIR que o registro seja removido
+                // 1. Remover diretamente do banco de dados primeiro
+                $deleted = $DB->delete_records('course_modules_completion', array(
+                    'coursemoduleid' => $cm->id,
+                    'userid' => $params['userid']
+                ));
+                debugging('BunnyVideo - Registros excluídos: ' . ($deleted ? 'Sim' : 'Não'), DEBUG_DEVELOPER);
                 
-                // Se ainda estiver marcado como completo, usar o banco de dados diretamente
-                if ($checkdata->completionstate != COMPLETION_INCOMPLETE) {
-                    debugging('BunnyVideo - API não funcionou, tentando direto no banco de dados', DEBUG_DEVELOPER);
-                    
-                    // Excluir o registro diretamente se a API falhar
-                    $DB->delete_records('course_modules_completion', array(
-                        'coursemoduleid' => $cm->id,
-                        'userid' => $params['userid']
-                    ));
-                    
-                    // Limpar o cache de conclusão - usando método compatível com versões mais antigas
-                    $completion = new \completion_info($course);
-                    $completion->get_data($cm, true, $params['userid']); // forçar recarga do cache
-                    
-                    // Recarregar para verificar se funcionou
-                    $finalcheck = $completion->get_data($cm, true, $params['userid']);
-                    debugging('BunnyVideo - Estado após exclusão direta: ' . $finalcheck->completionstate, DEBUG_DEVELOPER);
+                // 2. Tentar a API também para garantir consistência
+                try {
+                    $completion->update_state($cm, COMPLETION_INCOMPLETE, $params['userid']);
+                    debugging('BunnyVideo - API update_state concluído', DEBUG_DEVELOPER);
+                } catch (\Exception $e) {
+                    debugging('BunnyVideo - API update_state falhou, mas continuando: ' . $e->getMessage(), DEBUG_DEVELOPER);
+                    // Continuar mesmo se falhar aqui - o importante é que o registro foi excluído
                 }
                 
-                \core\session\manager::write_close(); // Release session lock early
+                // Liberar lock da sessão - importante para evitar bloqueios
+                \core\session\manager::write_close();
+                
+                // 3. Verificar o estado final
+                $check_completion = new \completion_info($course);
+                $finalstate = $check_completion->get_data($cm, true, $params['userid']);
+                debugging('BunnyVideo - Estado FINAL após remoção: ' . $finalstate->completionstate, DEBUG_DEVELOPER);
                 
                 return array(
                     'success' => true,
-                    'message' => get_string('completion_updated', 'mod_bunnyvideo') . ' (Direto no banco)'
+                    'message' => get_string('completion_updated', 'mod_bunnyvideo')
                 );
             } catch (\Exception $e) {
-                \core\session\manager::write_close(); // Release session lock early
+                \core\session\manager::write_close();
+                debugging('BunnyVideo - ERRO ao marcar como incompleto: ' . $e->getMessage(), DEBUG_DEVELOPER);
                 return array(
                     'success' => false,
                     'message' => get_string('completion_toggle_error', 'mod_bunnyvideo') . ' (' . $e->getMessage() . ')'
