@@ -72,9 +72,36 @@ function toggleCompletion(cmid, userid, newstate, button, originalText) {
         ajax.call([request])[0].done(function(response) {
             console.log('BunnyVideo - Toggle Response:', response);
             if (response.success) {
-                // Success - reload the page to show updated status
+                // Success - reload the page with cache-busting parameter to ensure menu updates
                 console.log('BunnyVideo - Operação bem-sucedida, recarregando página');
-                window.location.reload();
+                
+                // Forçar recarga completa da página para atualizar o menu lateral
+                var reloadUrl = window.location.href;
+                
+                // Adicionar ou atualizar parâmetro para evitar cache
+                // Criamos um parâmetro único que sinaliza ao Moodle que deve recarregar os ícones de navegação
+                var timestamp = new Date().getTime();
+                if (reloadUrl.indexOf('?') > -1) {
+                    // Remover qualquer parâmetro completion_updated anterior
+                    reloadUrl = reloadUrl.replace(/[&?]completion_updated=[^&]*/, '');
+                    // Adicionar novo parâmetro
+                    reloadUrl += '&completion_updated=' + timestamp + '&forcenavrefresh=1';
+                } else {
+                    reloadUrl += '?completion_updated=' + timestamp + '&forcenavrefresh=1';
+                }
+                
+                // Forçar atualização dos ícones de navegação antes da recarga
+                try {
+                    if (typeof M !== 'undefined' && M.core && M.core.refresh_completion_icons) {
+                        console.log('BunnyVideo - Tentando atualizar ícones via API');
+                        M.core.refresh_completion_icons();
+                    }
+                } catch(e) {
+                    console.error('BunnyVideo - Erro ao atualizar ícones:', e);
+                }
+                
+                // Recarregar a página com novos parâmetros
+                window.location.href = reloadUrl;
             } else {
                 // Error - restore button and show error
                 button.disabled = false;

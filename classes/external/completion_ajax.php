@@ -177,6 +177,41 @@ class completion_ajax extends \external_api {
                     // Continuar mesmo se falhar aqui - o importante é que o registro foi excluído
                 }
                 
+                // Limpar todos os caches específicos de navegação do Moodle
+                // Isso é crucial para que os ícones de conclusão sejam atualizados no menu lateral
+                if (class_exists('\core\navigation\cache')) {
+                    try {
+                        \core\navigation\cache::clear();
+                    } catch (\Exception $e) {
+                        debugging('BunnyVideo - Erro ao limpar cache de navegação: ' . $e->getMessage(), DEBUG_DEVELOPER);
+                    }
+                }
+                
+                // Usar uma abordagem mais segura para limpar caches
+                try {
+                    // Limpar apenas caches de navegação conhecidos
+                    $cachenames = [
+                        ['core', 'navigation_course'], 
+                        ['core', 'course_image'],
+                        ['core', 'completion'],
+                    ];
+                    
+                    foreach ($cachenames as $cachedef) {
+                        try {
+                            $cache = \cache::make($cachedef[0], $cachedef[1]);
+                            if ($cache) {
+                                $cache->purge();
+                                debugging('BunnyVideo - Cache ' . $cachedef[0] . '/' . $cachedef[1] . ' limpo com sucesso', DEBUG_DEVELOPER);
+                            }
+                        } catch (\Exception $e) {
+                            // Ignorar erros individuais de cache
+                            debugging('BunnyVideo - Erro ao limpar cache ' . $cachedef[0] . '/' . $cachedef[1] . ': ' . $e->getMessage(), DEBUG_DEVELOPER);
+                        }
+                    }
+                } catch (\Exception $e) {
+                    debugging('BunnyVideo - Erro geral ao limpar caches: ' . $e->getMessage(), DEBUG_DEVELOPER);
+                }
+                
                 // Liberar lock da sessão - importante para evitar bloqueios
                 \core\session\manager::write_close();
                 
