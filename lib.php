@@ -538,6 +538,15 @@ function bunnyvideo_get_completion_state_no_rule($course, $cm, $userid, $type) {
     return false;
 }
 
+/**
+ * Get CSS styles for bunnyvideo module
+ *
+ * @return array Array of CSS files to include
+ */
+function bunnyvideo_get_styles() {
+    return [new moodle_url('/mod/bunnyvideo/styles.css')];
+}
+
 // A função bunnyvideo_extend_navigation_completion pode ser deixada vazia por enquanto
 /**
  * Add navigation links

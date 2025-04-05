@@ -178,7 +178,6 @@ class completion_ajax extends \external_api {
                 }
                 
                 // Limpar todos os caches específicos de navegação do Moodle
-                // Isso é crucial para que os ícones de conclusão sejam atualizados no menu lateral
                 if (class_exists('\core\navigation\cache')) {
                     try {
                         \core\navigation\cache::clear();
@@ -212,13 +211,10 @@ class completion_ajax extends \external_api {
                     debugging('BunnyVideo - Erro geral ao limpar caches: ' . $e->getMessage(), DEBUG_DEVELOPER);
                 }
                 
-                // Liberar lock da sessão - importante para evitar bloqueios
-                \core\session\manager::write_close();
-                
                 // 3. Verificar o estado final
                 $check_completion = new \completion_info($course);
-                $finalstate = $check_completion->get_data($cm, true, $params['userid']);
-                debugging('BunnyVideo - Estado FINAL após remoção: ' . $finalstate->completionstate, DEBUG_DEVELOPER);
+                $finalstate = $check_completion->get_data($cm, true, $params['userid']); // Forçar recarga após deleção/API
+                debugging('BunnyVideo - Estado FINAL após remoção/API: ' . $finalstate->completionstate, DEBUG_DEVELOPER);
                 
                 return array(
                     'success' => true,
