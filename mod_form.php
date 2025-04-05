@@ -33,17 +33,8 @@ class mod_bunnyvideo_mod_form extends moodleform_mod {
         $mform->addRule('embedcode', get_string('required'), 'required', null, 'client');
         $mform->addRule('embedcode', get_string('invalidembedcode', 'mod_bunnyvideo'), 'regex', '/<iframe.*src=.*iframe\.mediadelivery\.net.*<\/iframe>/is', 'client');
 
-        // Adiciona o campo de porcentagem para conclusão
-        $mform->addElement('text', 'completionpercent', get_string('completionpercent', 'mod_bunnyvideo'), array('size' => '3'));
-        $mform->addHelpButton('completionpercent', 'completionpercent', 'mod_bunnyvideo');
-        $mform->setType('completionpercent', PARAM_INT);
-        $mform->addRule('completionpercent', get_string('numeric'), 'numeric', null, 'client');
-        $mform->addRule('completionpercent', get_string('invalidarg_numeric', 'completion', 100), 'rangelength', array(0, 100), 'client'); // Range 0-100
-        $mform->setDefault('completionpercent', 80); // Default to 80%
-
-        // Desabilita o campo de porcentagem se a conclusão de atividade estiver desabilitada no Moodle.
-        // 'completion' é o nome do elemento padrão que o Moodle adiciona para o controle principal da conclusão.
-        $mform->disabledIf('completionpercent', 'completion', 'eq', COMPLETION_TRACKING_NONE);
+        // Removemos o campo de porcentagem daqui, pois ele será adicionado pela função add_completion_rules
+        // que foi implementada no lib.php e será chamada pelo sistema de conclusão de atividades do Moodle
 
         //-------------------------------------------------------------------------------
         // Elementos padrão do Moodle para módulos (visibilidade, grupos, etc.)
@@ -87,6 +78,37 @@ class mod_bunnyvideo_mod_form extends moodleform_mod {
         unset($data->completionwhenpercentreached);
 
         return $data;
+    }
+
+    /**
+     * Adiciona ações de conclusão personalizada ao formulário de configuração.
+     * Importante: esta função é chamada pelo Moodle para integrar as regras personalizadas
+     * definidas em bunnyvideo_get_completion_rules()
+     *
+     * @return array
+     */
+    public function add_completion_rules() {
+        $mform = $this->_form;
+        
+        $group = [];
+        $group[] = $mform->createElement('text', 'completionpercent', get_string('completionpercent', 'mod_bunnyvideo'), ['size' => 3]);
+        $mform->setType('completionpercent', PARAM_INT);
+        $mform->addGroup($group, 'completionpercentgroup', get_string('completionpercent', 'mod_bunnyvideo'), ' ', false);
+        $mform->addHelpButton('completionpercentgroup', 'completionpercent', 'mod_bunnyvideo');
+        $mform->setDefault('completionpercent', 80);
+        
+        return ['completionpercentgroup'];
+    }
+
+    /**
+     * Ativa a regra de conclusão com base na presença de dados.
+     * Importante: esta função é chamada pelo Moodle para determinar se a regra deve ser ativada
+     *
+     * @param array $data Form data
+     * @return boolean
+     */
+    public function completion_rule_enabled($data) {
+        return (!empty($data['completionpercent']) && $data['completionpercent'] > 0);
     }
 
     // A validação pode permanecer como está.

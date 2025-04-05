@@ -9,7 +9,10 @@ var BunnyVideoDebugConfig = {
     debugLevel: 1,
     
     // Show debug UI elements like the manual completion button
-    showDebugUI: false
+    showDebugUI: false,
+    
+    // Resolution for time tracking (in seconds) - smaller values are more accurate but consume more memory
+    timeTrackingResolution: 1
 };
 
 // Simple debug logging helper with levels - always show important messages
@@ -67,6 +70,12 @@ window.BunnyVideoHandler = {
     completionSent: false,
     progressTimer: null,
     playerReady: false,
+    
+    // Time tracking variables
+    watchedSegments: [], // Array of watched time ranges [start, end]
+    lastPosition: null,  // Last position for tracking continuous watching
+    lastUpdateTime: null, // Timestamp of last update for handling inactive tabs
+    actualTimeWatched: 0, // Total seconds actually watched (accounting for skips)
     
     // Send completion status update via AJAX
     sendCompletion: function() {
@@ -163,66 +172,199 @@ window.BunnyVideoHandler = {
             bunnyVideoLog('Received timeupdate event', timingData, 'debug');
             
             // Parse the data if it's a string
-            var data = typeof timingData === 'string' ? JSON.parse(timingData) : timingData;
+            if (typeof timingData === 'string') {
+                timingData = JSON.parse(timingData);
+            }
             
-            // The standard Player.js library uses seconds and duration
-            var currentTime = 0;
-            var duration = 0;
+            // Different player.js implementations might have different data formats
+            var currentTime, duration;
             
-            // Handle different data formats from various Player.js implementations
-            if (data.seconds !== undefined && data.duration !== undefined) {
-                // Standard Player.js format
-                currentTime = data.seconds || 0;
-                duration = data.duration || 0;
+            // Check if the data has standard player.js format
+            if (timingData && typeof timingData.seconds !== 'undefined' && typeof timingData.duration !== 'undefined') {
                 bunnyVideoLog('Using standard Player.js data format', null, 'debug');
-            } else if (data.currentTime !== undefined && data.duration !== undefined) {
-                // Alternative format some players might use
-                currentTime = data.currentTime || 0;
-                duration = data.duration || 0;
-                bunnyVideoLog('Using alternative data format with currentTime', null, 'debug');
-            } else if (typeof data === 'object') {
-                // Try to intelligently find time data in the object
-                bunnyVideoLog('Searching for time data in object keys', Object.keys(data), 'debug');
-                for (var key in data) {
-                    if (key.toLowerCase().indexOf('time') !== -1 && key.toLowerCase().indexOf('current') !== -1) {
-                        currentTime = parseFloat(data[key]) || 0;
-                    }
-                    if (key.toLowerCase().indexOf('duration') !== -1 || key.toLowerCase().indexOf('length') !== -1) {
-                        duration = parseFloat(data[key]) || 0;
+                currentTime = parseFloat(timingData.seconds);
+                duration = parseFloat(timingData.duration);
+            } 
+            // Some implementations might use a different format
+            else if (timingData && typeof timingData.currentTime !== 'undefined' && typeof timingData.duration !== 'undefined') {
+                bunnyVideoLog('Using alternate data format with currentTime', null, 'debug');
+                currentTime = parseFloat(timingData.currentTime);
+                duration = parseFloat(timingData.duration);
+            }
+            // If all else fails, try to extract from possible other formats
+            else if (timingData) {
+                // Try to find any properties that might contain time information
+                for (var key in timingData) {
+                    var value = timingData[key];
+                    if (typeof value === 'number' || (typeof value === 'string' && !isNaN(parseFloat(value)))) {
+                        if (key.toLowerCase().indexOf('time') !== -1 && key.toLowerCase().indexOf('current') !== -1) {
+                            currentTime = parseFloat(value);
+                        } else if (key.toLowerCase().indexOf('duration') !== -1) {
+                            duration = parseFloat(value);
+                        }
                     }
                 }
             }
             
-            // Extra safety: ensure we have valid numbers
-            currentTime = parseFloat(currentTime) || 0;
-            duration = parseFloat(duration) || 0;
-            
-            if (duration <= 0) {
-                bunnyVideoLog('Invalid duration: ' + duration, null, 'debug');
-                return;
-            }
-            
-            // Calculate percentage watched
-            var percentWatched = (currentTime / duration) * 100;
-            var previousMax = this.maxPercentReached;
-            this.maxPercentReached = Math.max(this.maxPercentReached, percentWatched);
-            
-            // Only log significant changes to avoid flooding the console
-            if (Math.floor(this.maxPercentReached) > Math.floor(previousMax) || 
-                Math.floor(percentWatched / 5) !== Math.floor(previousMax / 5)) {
-                bunnyVideoLog('PROGRESS UPDATE: ' + percentWatched.toFixed(1) + '%, max: ' + 
-                        this.maxPercentReached.toFixed(1) + '%, target: ' + this.config.completionPercent + '%', 
-                        null, 'info');
-            }
-            
-            // Check if completion threshold reached
-            if (this.maxPercentReached >= this.config.completionPercent) {
-                bunnyVideoLog('COMPLETION THRESHOLD REACHED!', null, 'success');
-                this.sendCompletion();
+            // If we have both time values, we can update progress
+            if (!isNaN(currentTime) && !isNaN(duration) && duration > 0) {
+                var currentTimeRounded = Math.round(currentTime / BunnyVideoDebugConfig.timeTrackingResolution) * BunnyVideoDebugConfig.timeTrackingResolution;
+                var percentWatched = (currentTime / duration) * 100;
+                
+                // Still track maxPercentReached for debugging but don't use it for completion
+                if (percentWatched > this.maxPercentReached) {
+                    this.maxPercentReached = percentWatched;
+                    
+                    bunnyVideoLog('Current position: ' + percentWatched.toFixed(1) + '%, max: ' + 
+                            this.maxPercentReached.toFixed(1) + '%, target: ' + this.config.completionPercent + '%', 
+                            null, 'info');
+                }
+                
+                // Track actual time watched with segments
+                this.updateWatchedTime(currentTimeRounded);
+                
+                // Calculate the percentage of actual time watched
+                var percentOfActualTimeWatched = (this.actualTimeWatched / duration) * 100;
+                
+                // Log actual watched time information
+                bunnyVideoLog('Actual time watched: ' + this.formatTime(this.actualTimeWatched) + 
+                       ' (' + percentOfActualTimeWatched.toFixed(1) + '% of ' + this.formatTime(duration) + ')', 
+                       null, BunnyVideoDebugConfig.debugLevel >= 3 ? 'debug' : 'info');
+                
+                // ONLY use actual time watched for completion, not maxPercentReached
+                if (percentOfActualTimeWatched >= this.config.completionPercent) {
+                    bunnyVideoLog('COMPLETION THRESHOLD REACHED based on actual time watched!', null, 'success');
+                    this.sendCompletion();
+                }
             }
         } catch (e) {
             bunnyVideoLog('Error processing timeupdate:', e, 'error');
         }
+    },
+    
+    // Format time in seconds to MM:SS format
+    formatTime: function(seconds) {
+        if (isNaN(seconds)) return "00:00";
+        seconds = Math.floor(seconds);
+        var minutes = Math.floor(seconds / 60);
+        seconds = seconds % 60;
+        return (minutes < 10 ? "0" : "") + minutes + ":" + (seconds < 10 ? "0" : "") + seconds;
+    },
+    
+    // Update tracked time when player position changes
+    updateWatchedTime: function(currentTime) {
+        var now = Date.now();
+        
+        // Initialize last position if this is the first update
+        if (this.lastPosition === null) {
+            this.lastPosition = currentTime;
+            this.lastUpdateTime = now;
+            return;
+        }
+        
+        // Check if tab was inactive for too long (more than 2 seconds without updates)
+        var timeSinceLastUpdate = now - this.lastUpdateTime;
+        if (timeSinceLastUpdate > 2000) {
+            bunnyVideoLog('Tab may have been inactive, skipping time tracking for this interval', null, 'debug');
+            this.lastPosition = currentTime;
+            this.lastUpdateTime = now;
+            return;
+        }
+        
+        // If position moved forward by a small amount, count it as continuous watching
+        var positionDelta = Math.abs(currentTime - this.lastPosition);
+        if (positionDelta <= 2 * BunnyVideoDebugConfig.timeTrackingResolution) {
+            // Small forward movement (normal playback)
+            this.actualTimeWatched += positionDelta;
+            this.lastPosition = currentTime;
+            this.lastUpdateTime = now;
+            
+            // Add to watched segments (merge with existing if possible)
+            this.addWatchedSegment(currentTime - positionDelta, currentTime);
+        } else {
+            // Larger jump - user probably skipped
+            bunnyVideoLog('Position jump detected: ' + this.formatTime(this.lastPosition) + 
+                   ' → ' + this.formatTime(currentTime), null, 'debug');
+            this.lastPosition = currentTime;
+            this.lastUpdateTime = now;
+        }
+    },
+    
+    // Add a watched segment and merge overlapping segments
+    addWatchedSegment: function(start, end) {
+        if (start >= end) return;
+        
+        // Round to configured resolution
+        start = Math.floor(start / BunnyVideoDebugConfig.timeTrackingResolution) * BunnyVideoDebugConfig.timeTrackingResolution;
+        end = Math.ceil(end / BunnyVideoDebugConfig.timeTrackingResolution) * BunnyVideoDebugConfig.timeTrackingResolution;
+        
+        // Check if this segment overlaps with any existing segment
+        var merged = false;
+        for (var i = 0; i < this.watchedSegments.length; i++) {
+            var segment = this.watchedSegments[i];
+            
+            // Check for overlap
+            if (start <= segment[1] + BunnyVideoDebugConfig.timeTrackingResolution && 
+                end >= segment[0] - BunnyVideoDebugConfig.timeTrackingResolution) {
+                // Merge segments
+                segment[0] = Math.min(segment[0], start);
+                segment[1] = Math.max(segment[1], end);
+                merged = true;
+                break;
+            }
+        }
+        
+        // If no overlap, add as new segment
+        if (!merged) {
+            this.watchedSegments.push([start, end]);
+        }
+        
+        // Merge any segments that now overlap after the update
+        this.mergeOverlappingSegments();
+        
+        // Recalculate total time watched
+        this.recalculateTimeWatched();
+    },
+    
+    // Merge any overlapping segments
+    mergeOverlappingSegments: function() {
+        if (this.watchedSegments.length <= 1) return;
+        
+        // Sort segments by start time
+        this.watchedSegments.sort(function(a, b) {
+            return a[0] - b[0];
+        });
+        
+        // Merge overlapping segments
+        var merged = [];
+        var current = this.watchedSegments[0];
+        
+        for (var i = 1; i < this.watchedSegments.length; i++) {
+            var next = this.watchedSegments[i];
+            
+            // If current overlaps with next, merge them
+            if (current[1] + BunnyVideoDebugConfig.timeTrackingResolution >= next[0]) {
+                current[1] = Math.max(current[1], next[1]);
+            } else {
+                // No overlap, add current to merged list and move to next
+                merged.push(current);
+                current = next;
+            }
+        }
+        
+        // Add the last segment
+        merged.push(current);
+        this.watchedSegments = merged;
+    },
+    
+    // Recalculate total time watched from segments
+    recalculateTimeWatched: function() {
+        var total = 0;
+        for (var i = 0; i < this.watchedSegments.length; i++) {
+            var segment = this.watchedSegments[i];
+            total += (segment[1] - segment[0]);
+        }
+        this.actualTimeWatched = total;
     },
     
     // Poll for progress if timeupdate events aren't firing

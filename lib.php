@@ -41,9 +41,76 @@ function bunnyvideo_view($bunnyvideo, $cm, $context, $options=null) {
         debugging('Error creating event: ' . $e->getMessage(), DEBUG_DEVELOPER);
     }
 
-    // Completion: Mark as viewed (if completion is set to 'view')
+    // ABORDAGEM RADICAL: Impedir COMPLETAMENTE qualquer tentativa de marcar a visualização
+    // NÃO USAR $completion->set_module_viewed($cm) em NENHUMA circunstância
     $completion = new completion_info($course);
-    $completion->set_module_viewed($cm);
+    
+    // MODIFICAÇÃO CRÍTICA: Zerar completionstate se for baseado em visualização
+    // Verificar se a atividade acabou de ser marcada como concluída no banco de dados
+    // Se foi marcada como concluída por visualização, desfazer essa marcação
+    $completiondata = $completion->get_data($cm, false, $USER->id);
+    if ($completiondata->completionstate == COMPLETION_COMPLETE && 
+        $cm->completion == COMPLETION_TRACKING_AUTOMATIC && 
+        $cm->completionview == 1 && 
+        empty($bunnyvideo->completionpercent)) {
+        
+        // Apagar o registro de conclusão por visualização 
+        // diretamente, sem usar APIs que podem reativar a conclusão
+        $DB->delete_records('course_modules_completion', array(
+            'coursemoduleid' => $cm->id,
+            'userid' => $USER->id
+        ));
+        
+        // Recarregar os dados de conclusão para garantir que estejam limpos
+        $completiondata = $completion->get_data($cm, true, $USER->id);
+        debugging('BunnyVideo: Impedir conclusão automática por visualização');
+    }
+    
+    // Obter o status de conclusão atual para o usuário após a possível correção acima
+    $completionstate = $completiondata->completionstate;
+    $completionpercent = $bunnyvideo->completionpercent;
+    
+    // Determinar mensagem de status apropriada
+    $statusmessage = '';
+    if ($completionstate == COMPLETION_COMPLETE || $completionstate == COMPLETION_COMPLETE_PASS) {
+        $statusmessage = '<div class="alert alert-success">' . get_string('completion_status_complete', 'mod_bunnyvideo') . '</div>';
+    } else if ($completionpercent > 0) {
+        $statusmessage = '<div class="alert alert-info">' . 
+            get_string('completion_status_incomplete', 'mod_bunnyvideo', $completionpercent) . 
+            '</div>';
+    }
+    
+    // Check if the current user can manage completion (teacher/admin)
+    $canmanagecompletion = has_capability('mod/bunnyvideo:managecompletion', $context);
+    
+    // Add toggle button for teachers/admins
+    if ($canmanagecompletion && $cm->completion != COMPLETION_TRACKING_NONE) {
+        // Create button with opposite action of current state
+        $buttonlabel = ($completionstate == COMPLETION_COMPLETE || $completionstate == COMPLETION_COMPLETE_PASS) 
+            ? get_string('mark_incomplete', 'mod_bunnyvideo') 
+            : get_string('mark_complete', 'mod_bunnyvideo');
+        
+        $newstate = ($completionstate == COMPLETION_COMPLETE || $completionstate == COMPLETION_COMPLETE_PASS) 
+            ? COMPLETION_INCOMPLETE 
+            : COMPLETION_COMPLETE;
+        
+        // Add button to toggle completion status
+        $togglebutton = '<div class="completion-toggle-container float-right" style="margin-top: -40px; position: relative;">';
+        $togglebutton .= '<button type="button" class="btn btn-sm ' . 
+            (($completionstate == COMPLETION_COMPLETE || $completionstate == COMPLETION_COMPLETE_PASS) ? 'btn-warning' : 'btn-success') . 
+            ' completion-toggle-button" data-cmid="' . $cm->id . '" data-userid="' . $USER->id . '" data-newstate="' . $newstate . '">';
+        $togglebutton .= $buttonlabel . '</button>';
+        $togglebutton .= '</div>';
+        
+        // Add the toggle button to the status message
+        if (!empty($statusmessage)) {
+            // Insert the button into the existing status message
+            $statusmessage = str_replace('</div>', $togglebutton . '</div>', $statusmessage);
+        } else {
+            // Create a new status container if there wasn't one
+            $statusmessage = '<div class="alert alert-info">' . $togglebutton . '</div>';
+        }
+    }
 
     // Prepare data for JavaScript
     $jsdata = [
@@ -61,6 +128,11 @@ function bunnyvideo_view($bunnyvideo, $cm, $context, $options=null) {
     
     // Then add our handler script - this ensures proper order
     $html .= '<script src="'.$CFG->wwwroot.'/mod/bunnyvideo/js/player_handler.js?v='.time().'"></script>';
+    
+    // Add the completion toggle script if the user can manage completion
+    if ($canmanagecompletion && $cm->completion != COMPLETION_TRACKING_NONE) {
+        $html .= '<script src="'.$CFG->wwwroot.'/mod/bunnyvideo/js/completion_toggle.js?v='.time().'"></script>';
+    }
     
     // Only initialize after everything is loaded
     $html .= '<script>
@@ -85,9 +157,13 @@ function bunnyvideo_view($bunnyvideo, $cm, $context, $options=null) {
     // Monta o conteúdo HTML usando $OUTPUT e html_writer
     $content = '';
     $content .= $OUTPUT->box_start('generalbox boxaligncenter mod_bunnyvideo_content', 'bunnyvideocontent-'.$bunnyvideo->id); // ID único para o container geral
-    if (trim(strip_tags($intro))) {
-         $content .= $OUTPUT->box($intro, 'mod_introbox'); // Caixa para a introdução
-    }
+
+    // Adiciona a mensagem de status de conclusão ANTES do conteúdo
+    $content .= $statusmessage;
+    
+    // if (trim(strip_tags($intro))) {
+    //      $content .= $OUTPUT->box($intro, 'mod_introbox'); // Caixa para a introdução
+    // }
     
     // Adiciona um wrapper DIV com ID único para o JS encontrar o iframe facilmente
     $content .= '<div id="bunnyvideo-player-' . $bunnyvideo->id . '" class="bunnyvideo-player-wrapper">';
@@ -188,48 +264,126 @@ function bunnyvideo_delete_instance($id) {
  * @return mixed True if module supports feature, null if doesn't know
  */
 function bunnyvideo_supports($feature) {
-    switch ($feature) {
-        case FEATURE_MOD_INTRO:               return true;
-        case FEATURE_SHOW_DESCRIPTION:      return true;
-        case FEATURE_BACKUP_MOODLE2:        return true;
-        case FEATURE_COMPLETION_TRACKS_VIEWS: return true; // Supports "view" completion
-        case FEATURE_COMPLETION_HAS_RULES:  return true; // Supports automatic completion rules (our JS handles one)
-        case FEATURE_MODEDIT_DEFAULT_COMPLETION: return COMPLETION_TRACKING_AUTOMATIC; // Default to automatic completion
-        case FEATURE_GRADE_HAS_GRADE:     return false; // No grading implemented 
-        case FEATURE_RATE:                 return false; // No rating
-        // FEATURE_COMPLETION_MANUAL_ALLOWED is not available in this version of Moodle
-        // We'll handle preventing manual completion in the mod_form.php file
-        case FEATURE_MOD_PURPOSE:           return MOD_PURPOSE_CONTENT; // Describe module purpose
+    switch($feature) {
+        case FEATURE_BACKUP_MOODLE2:         return true;
+        case FEATURE_SHOW_DESCRIPTION:       return true;
+        case FEATURE_GRADE_HAS_GRADE:        return false; // No grading
+        case FEATURE_GROUPS:                 return false; // No grouping support
+        case FEATURE_GROUPINGS:              return false; // No grouping support
+        case FEATURE_MOD_INTRO:              return true;  // Basic intro field
+        case FEATURE_COMPLETION_TRACKS_VIEWS: return false; // Desativado para impedir marcação automática ao visualizar
+        case FEATURE_COMPLETION_HAS_RULES:   return true;  // We have custom completion rules
+        case FEATURE_MODEDIT_DEFAULT_COMPLETION: return true; // Default to completion tracked
+        case FEATURE_COMMENT:                return false; // No comments
+        case FEATURE_RATE:                   return false; // No rating
+        case FEATURE_MOD_PURPOSE:            return MOD_PURPOSE_CONTENT; // Describe module purpose
         default:                              return null;
     }
+}
+
+/**
+ * Defines all the completion rules for this module.
+ * Returns an array of the names of the custom completion rules (other than viewing/grade)
+ * This function is needed for Moodle 4.x to properly recognize the rules.
+ *
+ * @return array Array of strings defining the rules
+ */
+function bunnyvideo_get_completion_rules() {
+    return ['completionpercent'];
+}
+
+/**
+ * Adds the custom completion rule to the form elements.
+ *
+ * @param object $mform The form object
+ */
+function bunnyvideo_add_completion_rules($mform) {
+    $mform->addElement('text', 'completionpercent', get_string('completionpercent', 'bunnyvideo'), ['size' => 3]);
+    $mform->setType('completionpercent', PARAM_INT);
+    $mform->addHelpButton('completionpercent', 'completionpercent', 'bunnyvideo');
+    $mform->setDefault('completionpercent', 0);
+    $mform->addRule('completionpercent', null, 'numeric', null, 'client');
+    $mform->addRule('completionpercent', get_string('err_numeric', 'form'), 'numeric', null, 'server');
+    $mform->setAdvanced('completionpercent');
+    
+    return ['completionpercent'];
+}
+
+/**
+ * Returns a description of the custom completion rules.
+ *
+ * @param array $rules The rules as returned from this module's completion_rules function
+ * @param object $cm The course module instance
+ * @return array Array of string descriptions of rules
+ */
+function bunnyvideo_completion_rule_description($rules) {
+    $descriptions = [];
+    
+    if (!empty($rules['completionpercent'])) {
+        if ($rules['completionpercent'] > 0) {
+            $descriptions[] = get_string('completionpercenthelp', 'bunnyvideo', $rules['completionpercent']);
+        }
+    }
+    
+    return $descriptions;
 }
 
 /**
  * Returns the completion state for the given activity, user and course context.
  * This is used by the completion report and other areas to check status.
  * Our JS/AJAX handles the actual marking based on percentage. Moodle handles view completion.
- * This function mostly relies on Moodle's stored completion state.
  *
  * @param object $course Course object
  * @param object $cm Course-module object
  * @param int $userid User ID
  * @param bool $type Type of comparison (normally null)
- * @return stdClass An object containing state and time fields
+ * @return stdClass|bool An object with 'state' and 'time' fields, or boolean for simple rules
  */
 function bunnyvideo_get_completion_state($course, $cm, $userid, $type) {
     global $DB;
 
-    // Standard way to get completion data
+    // Get the current completion state from Moodle
     $completion = new completion_info($course);
-    $state = $completion->get_data($cm, $userid);
+    $current = $completion->get_data($cm, false, $userid);
 
-    // If the only condition is our percentage watch (handled by JS/AJAX)
-    // and Moodle hasn't registered it as complete yet via AJAX, it's incomplete.
-    // However, Moodle's $completion->get_data should reflect the state updated by our AJAX call.
-    // No special logic needed here usually, unless overriding Moodle's default view tracking.
-    // If 'Require view' is ticked AND percentage > 0, both must be met. Moodle tracks view, JS tracks percent.
-
-    return $state;
+    // For manual marking or overall state request (null type)
+    if (empty($type) || $type == 'completionpercent') {
+        // Fetch the bunnyvideo record for percentage checking
+        $bunnyvideo = $DB->get_record('bunnyvideo', ['id' => $cm->instance], 'completionpercent');
+        
+        // If this is manual completion, we should honor the current state
+        // This allows admin overrides to work in the reporting interface
+        if ($cm->completion == COMPLETION_TRACKING_MANUAL) {
+            return $current;
+        }
+        
+        // If we're using automatic completion with percentage rule
+        if ($cm->completion == COMPLETION_TRACKING_AUTOMATIC && 
+            !empty($bunnyvideo->completionpercent) && 
+            $bunnyvideo->completionpercent > 0) {
+            
+            // For a null type request (main completion state check), return the current state
+            // This ensures the report reflects the true state marked by our JavaScript
+            return $current;
+        }
+        
+        // CORREÇÃO ADICIONAL: Force incomplete state if the only reason for completion
+        // would be view completion (completionview) which we've disabled
+        if ($current->completionstate == COMPLETION_COMPLETE && 
+            $cm->completion == COMPLETION_TRACKING_AUTOMATIC && 
+            $cm->completionview == 1 && 
+            (empty($bunnyvideo->completionpercent) || $bunnyvideo->completionpercent <= 0)) {
+            
+            $state = new stdClass();
+            $state->completionstate = COMPLETION_INCOMPLETE;
+            $state->timemodified = 0;
+            debugging('BunnyVideo: Forcing INCOMPLETE for improper view completion.');
+            return $state;
+        }
+    }
+    
+    // Return the current state for all other cases
+    return $current;
 }
 
 /**
@@ -269,9 +423,120 @@ function bunnyvideo_cm_completion_settings_changed($data, $cm, $completion, $ena
     return $reset;
 }
 
+/**
+ * Callback function when the completion settings form is processed.
+ * Used to reset completion status if settings change significantly.
+ *
+ * @param stdClass $cm The course module object (new state)
+ * @param stdClass $oldcm The previous course module object (old state)
+ * @param stdClass $data Form data submitted (new bunnyvideo settings)
+ * @param stdClass $olddata The previous bunnyvideo instance data (fetched)
+ * @return bool Always true
+ */
+function bunnyvideo_update_completion_state_settings($cm, $oldcm, $data, $olddata) {
+    global $DB;
 
-// Add other required lib functions like backup/restore placeholders if needed.
-// Moodle can often auto-generate basic backup/restore handlers if structure exists.
+    // Fetch the old bunnyvideo instance record if needed for comparison
+    $oldbunnyvideo = $DB->get_record('bunnyvideo', ['id' => $oldcm->instance], 'id, completionpercent');
+
+    // Check if the core completion tracking method changed
+    $corecompletionchanged = $cm->completion != $oldcm->completion ||
+                             $cm->completionview != $oldcm->completionview;
+
+    // Check if our custom percentage rule changed
+    // Note: $data contains the submitted form data, $oldbunnyvideo the previous db value.
+    $percentrulechanged = false;
+    $newpercent = isset($data->completionpercent) ? (int)$data->completionpercent : 0;
+    $oldpercent = $oldbunnyvideo ? (int)$oldbunnyvideo->completionpercent : 0;
+    if ($newpercent != $oldpercent) {
+        $percentrulechanged = true;
+    }
+
+    // If any relevant completion setting was modified, trigger a reset.
+    if ($corecompletionchanged || $percentrulechanged) {
+        // Mark that settings affecting completion have been updated.
+        // Moodle core will handle resetting completion status for users based on this.
+        mark_completion_state_updated($cm->id, time());
+        debugging("BunnyVideo: Completion settings changed, triggering state update for cmid: {$cm->id}", DEBUG_DEVELOPER);
+    }
+
+    return true; // Must return true
+}
+
+/**
+ * Returns description of the active completion rule for this module instance.
+ * Used in reports like Activity Completion.
+ *
+ * @param cm_info|stdClass $cm Course-module object
+ * @param bool $showdescription Whether to show the full description (not just title)
+ * @return string|null Description of the rule, or null if none specifically applies beyond view
+ */
+function bunnyvideo_get_completion_active_rule($cm, $showdescription) {
+    global $DB, $CFG;
+    
+    // Only provide a specific rule description if automatic completion is used
+    if ($cm->completion != COMPLETION_TRACKING_AUTOMATIC) {
+        return null;
+    }
+    
+    // Get the bunnyvideo instance to check the percentage
+    $bunnyvideo = $DB->get_record('bunnyvideo', ['id' => $cm->instance], 'id, completionpercent');
+    
+    // Build an array of rule descriptions
+    $rules = [];
+    
+    // Check if the percentage rule is enabled for this instance 
+    if (!empty($bunnyvideo->completionpercent) && intval($bunnyvideo->completionpercent) > 0) {
+        // Add the percentage rule description
+        $rules[] = get_string('completionrulenamepercent', 'bunnyvideo', $bunnyvideo->completionpercent);
+    }
+    
+    // Return all rules as a formatted string
+    if (!empty($rules)) {
+        if (count($rules) == 1) {
+            return $rules[0]; // Just return the single rule
+        } else {
+            // Format multiple rules if needed (unlikely for our module)
+            return implode(', ', $rules);
+        }
+    }
+    
+    return null; // No rules active
+}
+
+/**
+ * Return completion state for any criteria (including core ones) that don't have
+ * a more specific method.
+ *
+ * @param stdClass $course Course
+ * @param cm_info|stdClass $cm     Activity
+ * @param int $userid User ID
+ * @param string $type Criteria type
+ * @return bool
+ */
+function bunnyvideo_get_completion_state_no_rule($course, $cm, $userid, $type) {
+    global $DB;
+    
+    $bunnyvideo = $DB->get_record('bunnyvideo', array('id' => $cm->instance), '*', MUST_EXIST);
+    
+    // If completion is not enabled for this activity, just return the state
+    if ($cm->completion == COMPLETION_TRACKING_NONE) {
+        return COMPLETION_INCOMPLETE;
+    }
+    
+    // Handle percentage-based completion
+    if ($type == 'completionpercentprogress') {
+        // We only get here if the percentage rule is active and we need to check it
+        if (!empty($bunnyvideo->completionpercent)) {
+            // In a real scenario, we would check user progress data from our tables
+            // For now, since we only want to display the rule, we can return false
+            return COMPLETION_INCOMPLETE;
+        }
+    }
+    
+    // For any other type, delegate to the parent function
+    return false;
+}
 
 // A função bunnyvideo_extend_navigation_completion pode ser deixada vazia por enquanto
 /**
@@ -280,3 +545,6 @@ function bunnyvideo_cm_completion_settings_changed($data, $cm, $completion, $ena
  * @param string $context The context string
  */
 // function bunnyvideo_extend_navigation_completion($node, $context) { } // Não é estritamente necessário agora
+
+// Add other required lib functions like backup/restore placeholders if needed.
+// Moodle can often auto-generate basic backup/restore handlers if structure exists.

@@ -20,6 +20,14 @@ require_login($course, true, $cm);
 $context = context_module::instance($cm->id);
 require_capability('mod/bunnyvideo:view', $context);
 
+// IMPORTANTE: Desabilitar explicitamente o rastreamento de visualização para conclusão
+// Isso evita que o Moodle marque a atividade como concluída quando o aluno apenas visualiza
+if ($cm->completion == COMPLETION_TRACKING_AUTOMATIC && $cm->completionview) {
+    // Se as configurações atuais incluem completionview, vamos remover esse comportamento
+    // temporariamente para esta execução, sem alterar o banco de dados
+    $cm->completionview = 0;
+}
+
 // --- Set up the page ---
 $PAGE->set_url('/mod/bunnyvideo/view.php', array('id' => $cm->id));
 $PAGE->set_title(format_string($bunnyvideo->name));

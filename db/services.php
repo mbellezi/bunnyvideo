@@ -9,5 +9,14 @@ $functions = array(
         'type'          => 'write', // Indicates it modifies data
         'ajax'          => true,    // Available via AJAX
         'capabilities'  => 'mod/bunnyvideo:view', // User needs at least view capability
+    ),
+    
+    'mod_bunnyvideo_toggle_completion' => array(
+        'classname'     => 'mod_bunnyvideo\external\completion_ajax',
+        'methodname'    => 'toggle_completion',
+        'description'   => 'Toggles completion status of a Bunny Video activity for any user (teacher/admin only).',
+        'type'          => 'write', // Indicates it modifies data
+        'ajax'          => true,    // Available via AJAX
+        'capabilities'  => 'mod/bunnyvideo:managecompletion', // Requires special capability
     )
 );
