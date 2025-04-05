@@ -151,8 +151,16 @@ function bunnyvideo_view($bunnyvideo, $cm, $context, $options=null) {
     $name = format_string($bunnyvideo->name, true, ['context' => $context]);
     $intro = format_module_intro('bunnyvideo', $bunnyvideo, $cm->id);
     
-    // Formata o embed code (com cuidado - veja notas anteriores sobre segurança/confiança)
-    $embedcode_html = format_text($bunnyvideo->embedcode, FORMAT_HTML, ['trusted' => true, 'noclean' => true, 'context' => $context]);
+    // Verifica se o usuário tem capacidade de visualizar conteúdo confiável
+    if (has_capability('moodle/site:trustcontent', $context)) {
+        // Para professores e administradores, usa format_text normalmente
+        $embedcode_html = format_text($bunnyvideo->embedcode, FORMAT_HTML, ['trusted' => true, 'noclean' => true, 'context' => $context]);
+    } else {
+        // Para estudantes, usa diretamente o código embed sem filtrar
+        // Isso ignora os filtros de segurança, mas é necessário para mostrar o iframe
+        $embedcode_html = $bunnyvideo->embedcode;
+        debugging('BunnyVideo: Bypass Moodle format_text filtros para estudantes', DEBUG_DEVELOPER);
+    }
 
     // Monta o conteúdo HTML usando $OUTPUT e html_writer
     $content = '';
