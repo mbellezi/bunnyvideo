@@ -108,6 +108,8 @@ class mod_bunnyvideo_mod_form extends moodleform_mod {
      * @return boolean
      */
     public function completion_rule_enabled($data) {
+        // Rule is enabled if the percentage field has a value greater than 0
+        // Moodle seems to pass data as an array here, despite object elsewhere
         return (!empty($data['completionpercent']) && $data['completionpercent'] > 0);
     }
 

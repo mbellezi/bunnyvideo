@@ -216,6 +216,9 @@ class completion_ajax extends \external_api {
                 $finalstate = $check_completion->get_data($cm, true, $params['userid']); // Forçar recarga após deleção/API
                 debugging('BunnyVideo - Estado FINAL após remoção/API: ' . $finalstate->completionstate, DEBUG_DEVELOPER);
                 
+                // IMPORTANTE: Liberar o bloqueio de sessão ANTES de retornar
+                \core\session\manager::write_close();
+                
                 return array(
                     'success' => true,
                     'message' => get_string('completion_updated', 'mod_bunnyvideo')
@@ -232,14 +235,16 @@ class completion_ajax extends \external_api {
             // Para marcar como completo, usar o método padrão
             try {
                 $completion->update_state($cm, $completionstate, $params['userid']);
-                \core\session\manager::write_close(); // Release session lock early
+                
+                // IMPORTANTE: Liberar o bloqueio de sessão ANTES de retornar
+                \core\session\manager::write_close();
                 
                 return array(
                     'success' => true,
                     'message' => get_string('completion_updated', 'mod_bunnyvideo')
                 );
             } catch (\Exception $e) {
-                \core\session\manager::write_close(); // Release session lock early
+                \core\session\manager::write_close();
                 return array(
                     'success' => false,
                     'message' => get_string('completion_toggle_error', 'mod_bunnyvideo') . ' (' . $e->getMessage() . ')'

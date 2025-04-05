@@ -547,6 +547,76 @@ function bunnyvideo_get_styles() {
     return [new moodle_url('/mod/bunnyvideo/styles.css')];
 }
 
+/**
+ * Return information about this module for the course module info.
+ * Used by Moodle to display the module in course listings.
+ *
+ * @param stdClass $coursemodule
+ * @return cached_cm_info|null Info to display for the module instance.
+ */
+function bunnyvideo_get_coursemodule_info($coursemodule) {
+    global $DB;
+
+    // Get basic info from the database
+    if (!$bunnyvideo = $DB->get_record('bunnyvideo', ['id' => $coursemodule->instance], 
+        'id, name, intro, introformat')) {
+        return null;
+    }
+
+    // Initialize the result object
+    $info = new cached_cm_info();
+    $info->name = $bunnyvideo->name;
+    
+    // Set the content if intro exists and showdescription is enabled
+    if ($coursemodule->showdescription && $bunnyvideo->intro) {
+        // Convert intro to html
+        $info->content = format_module_intro('bunnyvideo', $bunnyvideo, $coursemodule->id, false);
+    }
+
+    // IMPORTANTE: Forçar visibilidade para todos os usuários
+    // Isso corrige problemas com o módulo não aparecendo para alunos
+    $info->visible = true;
+    $info->visibleoncoursepage = true;
+    
+    // Configurações personalizadas adicionais
+    $info->customdata = [
+        'visible_to_all' => true,
+    ];
+
+    return $info;
+}
+
+/**
+ * Extend the course navigation with the BunnyVideo module
+ *
+ * @param navigation_node $parentnode
+ * @param stdClass $course
+ * @param context_course $context
+ */
+function bunnyvideo_extend_navigation_course($parentnode, $course, $context) {
+    // Esta função garante que o módulo apareça na navegação do curso
+    global $DB;
+    
+    // Garante que módulos de atividade BunnyVideo apareçam para alunos
+    if (has_capability('mod/bunnyvideo:view', $context)) {
+        // Normalmente não precisamos fazer nada aqui, mas incluir a função
+        // sinaliza para o Moodle que o módulo deve ser considerado na navegação
+    }
+}
+
+/**
+ * Extends the navigation with the bunnyvideo settings
+ *
+ * @param settings_navigation $settingsnav
+ * @param navigation_node $videonode
+ */
+function bunnyvideo_extend_settings_navigation(settings_navigation $settingsnav, navigation_node $videonode) {
+    global $PAGE;
+    
+    // Nada especial para fazer aqui, esta função é principalmente um placeholder
+    // para garantir integração completa com a navegação do Moodle
+}
+
 // A função bunnyvideo_extend_navigation_completion pode ser deixada vazia por enquanto
 /**
  * Add navigation links
