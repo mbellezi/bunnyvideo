@@ -151,106 +151,34 @@ class completion_ajax extends \external_api {
         $currentdata = $completion->get_data($cm, true, $params['userid']); // Forçar recarregamento
         debugging('BunnyVideo - Estado atual: ' . $currentdata->completionstate . 
                  ' - Tentando alterar para: ' . $params['newstate'], DEBUG_DEVELOPER);
+		// Map the newstate parameter to Moodle completion constants
+		$completionstate = ($newstate == 1) ? COMPLETION_COMPLETE : COMPLETION_INCOMPLETE;
 
-        // Map the newstate parameter to Moodle completion constants
-        $completionstate = ($params['newstate'] == 1) ? COMPLETION_COMPLETE : COMPLETION_INCOMPLETE;
+		try {
+			// Update the completion state using the Moodle API
+			$completion->update_state($cm, $completionstate, $userid, true);
+
+			// Clear the completion cache
+			$cache = \cache::make('core', 'completion');
+			$cache->purge();
+
+			// Optionally clear the navigation cache if needed
+			// $cache = \cache::make('core', 'navigation_course');
+			// $cache->purge();
+
+			\core\session\manager::write_close();
+			return array(
+				'success' => true,
+				'message' => get_string('completion_updated', 'mod_bunnyvideo')
+			);
+		} catch (\Exception $e) {
+			\core\session\manager::write_close();
+			return array(
+				'success' => false,
+				'message' => get_string('completion_toggle_error', 'mod_bunnyvideo') . ' (' . $e->getMessage() . ')'
+			);
+		}
         
-        // Estratégia explícita para marcar como incompleto
-        if ($completionstate == COMPLETION_INCOMPLETE) {
-            try {
-                debugging('BunnyVideo - INICIANDO processo para marcar como INCOMPLETO', DEBUG_DEVELOPER);
-                
-                // IMPORTANTE: Precisamos GARANTIR que o registro seja removido
-                // 1. Remover diretamente do banco de dados primeiro
-                $deleted = $DB->delete_records('course_modules_completion', array(
-                    'coursemoduleid' => $cm->id,
-                    'userid' => $params['userid']
-                ));
-                debugging('BunnyVideo - Registros excluídos: ' . ($deleted ? 'Sim' : 'Não'), DEBUG_DEVELOPER);
-                
-                // 2. Tentar a API também para garantir consistência
-                try {
-                    $completion->update_state($cm, COMPLETION_INCOMPLETE, $params['userid']);
-                    debugging('BunnyVideo - API update_state concluído', DEBUG_DEVELOPER);
-                } catch (\Exception $e) {
-                    debugging('BunnyVideo - API update_state falhou, mas continuando: ' . $e->getMessage(), DEBUG_DEVELOPER);
-                    // Continuar mesmo se falhar aqui - o importante é que o registro foi excluído
-                }
-                
-                // Limpar todos os caches específicos de navegação do Moodle
-                if (class_exists('\core\navigation\cache')) {
-                    try {
-                        \core\navigation\cache::clear();
-                    } catch (\Exception $e) {
-                        debugging('BunnyVideo - Erro ao limpar cache de navegação: ' . $e->getMessage(), DEBUG_DEVELOPER);
-                    }
-                }
-                
-                // Usar uma abordagem mais segura para limpar caches
-                try {
-                    // Limpar apenas caches de navegação conhecidos
-                    $cachenames = [
-                        ['core', 'navigation_course'], 
-                        ['core', 'course_image'],
-                        ['core', 'completion'],
-                    ];
-                    
-                    foreach ($cachenames as $cachedef) {
-                        try {
-                            $cache = \cache::make($cachedef[0], $cachedef[1]);
-                            if ($cache) {
-                                $cache->purge();
-                                debugging('BunnyVideo - Cache ' . $cachedef[0] . '/' . $cachedef[1] . ' limpo com sucesso', DEBUG_DEVELOPER);
-                            }
-                        } catch (\Exception $e) {
-                            // Ignorar erros individuais de cache
-                            debugging('BunnyVideo - Erro ao limpar cache ' . $cachedef[0] . '/' . $cachedef[1] . ': ' . $e->getMessage(), DEBUG_DEVELOPER);
-                        }
-                    }
-                } catch (\Exception $e) {
-                    debugging('BunnyVideo - Erro geral ao limpar caches: ' . $e->getMessage(), DEBUG_DEVELOPER);
-                }
-                
-                // 3. Verificar o estado final
-                $check_completion = new \completion_info($course);
-                $finalstate = $check_completion->get_data($cm, true, $params['userid']); // Forçar recarga após deleção/API
-                debugging('BunnyVideo - Estado FINAL após remoção/API: ' . $finalstate->completionstate, DEBUG_DEVELOPER);
-                
-                // IMPORTANTE: Liberar o bloqueio de sessão ANTES de retornar
-                \core\session\manager::write_close();
-                
-                return array(
-                    'success' => true,
-                    'message' => get_string('completion_updated', 'mod_bunnyvideo')
-                );
-            } catch (\Exception $e) {
-                \core\session\manager::write_close();
-                debugging('BunnyVideo - ERRO ao marcar como incompleto: ' . $e->getMessage(), DEBUG_DEVELOPER);
-                return array(
-                    'success' => false,
-                    'message' => get_string('completion_toggle_error', 'mod_bunnyvideo') . ' (' . $e->getMessage() . ')'
-                );
-            }
-        } else {
-            // Para marcar como completo, usar o método padrão
-            try {
-                $completion->update_state($cm, $completionstate, $params['userid']);
-                
-                // IMPORTANTE: Liberar o bloqueio de sessão ANTES de retornar
-                \core\session\manager::write_close();
-                
-                return array(
-                    'success' => true,
-                    'message' => get_string('completion_updated', 'mod_bunnyvideo')
-                );
-            } catch (\Exception $e) {
-                \core\session\manager::write_close();
-                return array(
-                    'success' => false,
-                    'message' => get_string('completion_toggle_error', 'mod_bunnyvideo') . ' (' . $e->getMessage() . ')'
-                );
-            }
-        }
     }
 
     /**
