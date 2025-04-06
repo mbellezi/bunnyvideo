@@ -2,7 +2,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 require_once($CFG->dirroot . '/course/moodleform_mod.php');
-require_once($CFG->libdir.'/completionlib.php'); // Needed for COMPLETION_TRACKING_NONE constant
+require_once($CFG->libdir.'/completionlib.php'); // Necessário para a constante COMPLETION_TRACKING_NONE
 
 class mod_bunnyvideo_mod_form extends moodleform_mod {
 
@@ -41,7 +41,7 @@ class mod_bunnyvideo_mod_form extends moodleform_mod {
         // Esta chamada é importante e deve permanecer.
         $this->standard_coursemodule_elements();
         
-        // Add warning message about automatic completion only
+        // Adiciona mensagem de aviso sobre conclusão automática apenas
         $mform->addElement('static', 'completioninfo', '', 
             '<div class="alert alert-info">'.
             'A conclusão manual pelo usuário não está disponível para atividades Bunny Video. '.
@@ -56,8 +56,8 @@ class mod_bunnyvideo_mod_form extends moodleform_mod {
     /**
       * Ajusta os dados após o envio do formulário, antes de salvar.
       * Garante que completionpercent seja 0 se a conclusão estiver desabilitada.
-      * @param object $data data from the form
-      * @return object processed data object
+      * @param object $data dados do formulário
+      * @return object objeto de dados processado
       */
     public function data_postprocessing($data) {
         parent::data_postprocessing($data);
@@ -104,12 +104,12 @@ class mod_bunnyvideo_mod_form extends moodleform_mod {
      * Ativa a regra de conclusão com base na presença de dados.
      * Importante: esta função é chamada pelo Moodle para determinar se a regra deve ser ativada
      *
-     * @param array $data Form data
+     * @param array $data Dados do formulário
      * @return boolean
      */
     public function completion_rule_enabled($data) {
-        // Rule is enabled if the percentage field has a value greater than 0
-        // Moodle seems to pass data as an array here, despite object elsewhere
+        // A regra está habilitada se o campo de porcentagem tiver um valor maior que 0
+        // O Moodle parece passar dados como um array aqui, apesar de ser objeto em outros lugares
         return (!empty($data['completionpercent']) && $data['completionpercent'] > 0);
     }
 

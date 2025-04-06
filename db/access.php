@@ -34,5 +34,5 @@ $capabilities = array(
             'manager' => CAP_ALLOW
         )
     ),
-    // If you add grading or other features, add more capabilities here.
+    // Se você adicionar avaliação ou outros recursos, adicione mais capabilities aqui.
 );

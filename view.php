@@ -1,10 +1,10 @@
 <?php
-require_once('../../config.php'); // Moodle config
-require_once('lib.php');       // Include your library file
+require_once('../../config.php'); // Configuração do Moodle
+require_once('lib.php');       // Inclui o arquivo da biblioteca
 
-$id = required_param('id', PARAM_INT); // Course Module ID
+$id = required_param('id', PARAM_INT); // ID do Módulo do Curso
 
-// Get course module and course record
+// Obtém o módulo do curso e o registro do curso
 if (!$cm = get_coursemodule_from_id('bunnyvideo', $id)) {
     print_error('invalidcoursemodule');
 }
@@ -12,10 +12,10 @@ if (!$course = $DB->get_record('course', array('id' => $cm->course))) {
     print_error('coursemisconf');
 }
 if (!$bunnyvideo = $DB->get_record('bunnyvideo', array('id' => $cm->instance))) {
-    print_error('invalidcoursemodule'); // Or a more specific error
+    print_error('invalidcoursemodule'); // Ou um erro mais específico
 }
 
-// Require user to be logged in and enrolled (or guest access if allowed)
+// Requer que o usuário esteja logado e inscrito (ou acesso de visitante, se permitido)
 require_login($course, true, $cm);
 $context = context_module::instance($cm->id);
 require_capability('mod/bunnyvideo:view', $context);
@@ -28,16 +28,16 @@ if ($cm->completion == COMPLETION_TRACKING_AUTOMATIC && $cm->completionview) {
     $cm->completionview = 0;
 }
 
-// --- Set up the page ---
+// --- Configura a página ---
 $PAGE->set_url('/mod/bunnyvideo/view.php', array('id' => $cm->id));
 $PAGE->set_title(format_string($bunnyvideo->name));
 $PAGE->set_heading(format_string($course->fullname));
 $PAGE->set_context($context);
 
-// --- Output the page ---
+// --- Exibe a página ---
 echo $OUTPUT->header();
 
-// Call the view function from lib.php to render the content
+// Chama a função view de lib.php para renderizar o conteúdo
 echo bunnyvideo_view($bunnyvideo, $cm, $context);
 
 echo $OUTPUT->footer();

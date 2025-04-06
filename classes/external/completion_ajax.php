@@ -5,74 +5,74 @@ defined('MOODLE_INTERNAL') || die();
 
 require_once($CFG->libdir.'/externallib.php');
 require_once($CFG->libdir.'/completionlib.php');
-require_once($CFG->dirroot.'/mod/bunnyvideo/lib.php'); // Include module lib
+require_once($CFG->dirroot.'/mod/bunnyvideo/lib.php'); // Inclui a lib do módulo
 
 class completion_ajax extends \external_api {
 
     /**
-     * Define parameters for the mark_complete function.
+     * Define os parâmetros para a função mark_complete.
      * @return \external_function_parameters
      */
     public static function mark_complete_parameters() {
         return new \external_function_parameters(
             array(
-                'cmid' => new \external_value(PARAM_INT, 'The course module ID')
+                'cmid' => new \external_value(PARAM_INT, 'O ID do módulo do curso')
             )
         );
     }
 
     /**
-     * Mark the activity complete.
-     * @param int $cmid Course module ID.
-     * @return array Success status and optional message.
+     * Marca a atividade como concluída.
+     * @param int $cmid ID do módulo do curso.
+     * @return array Status de sucesso e mensagem opcional.
      */
     public static function mark_complete($cmid) {
         global $USER, $DB;
 
-        // Validate parameters.
+        // Valida os parâmetros.
         $params = self::validate_parameters(self::mark_complete_parameters(), array('cmid' => $cmid));
 
-        // Get context and check capabilities.
+        // Obtém o contexto e verifica as capacidades.
         $cm = get_coursemodule_from_id('bunnyvideo', $params['cmid'], 0, false, MUST_EXIST);
         $course = $DB->get_record('course', array('id' => $cm->course), '*', MUST_EXIST);
         $context = \context_module::instance($cm->id);
         self::validate_context($context);
 
-        // Check if user has capability to view (implicitly required to interact)
+        // Verifica se o usuário tem capacidade de visualizar (implicitamente necessário para interagir)
         require_capability('mod/bunnyvideo:view', $context);
 
-        // Get activity instance
+        // Obtém a instância da atividade
         $bunnyvideo = $DB->get_record('bunnyvideo', array('id' => $cm->instance), '*', MUST_EXIST);
 
-        // Check if completion is enabled and uses percentage
+        // Verifica se a conclusão está habilitada e usa porcentagem
         $completion = new \completion_info($course);
         if (!$completion->is_enabled($cm) || $bunnyvideo->completionpercent <= 0) {
-            // Completion not enabled or not based on percentage for this activity
+            // Conclusão não habilitada ou não baseada em porcentagem para esta atividade
              return array(
                  'success' => false,
-                 'message' => get_string('error_cannotmarkcomplete', 'mod_bunnyvideo') . ' (Completion not enabled or not percentage based)'
+                 'message' => get_string('error_cannotmarkcomplete', 'mod_bunnyvideo') . ' (Conclusão não habilitada ou não baseada em porcentagem)'
              );
         }
 
-        // Check current completion state
-        $currentcompletion = $completion->get_data($cm, $USER->id, true); // Get current state, ignore cache
+        // Verifica o estado atual da conclusão
+        $currentcompletion = $completion->get_data($cm, $USER->id, true); // Obtém o estado atual, ignora o cache
 
         if ($currentcompletion->completionstate == COMPLETION_COMPLETE) {
-             // Already complete, nothing to do. Return success.
-             \core\session\manager::write_close(); // Release session lock early
-             return array('success' => true, 'message' => 'Already complete.');
+             // Já concluído, nada a fazer. Retorna sucesso.
+             \core\session\manager::write_close(); // Libera o bloqueio da sessão mais cedo
+             return array('success' => true, 'message' => 'Já concluído.');
         }
 
-        // --- Mark the activity as complete ---
-        // Use the Moodle completion API
+        // --- Marca a atividade como concluída ---
+        // Usa a API de conclusão do Moodle
         try {
              $completion->update_state($cm, COMPLETION_COMPLETE, $USER->id);
-             \core\session\manager::write_close(); // Release session lock early
-             // Trigger completion updated event maybe? Moodle might do this automatically.
+             \core\session\manager::write_close(); // Libera o bloqueio da sessão mais cedo
+             // Disparar evento de conclusão atualizado talvez? O Moodle pode fazer isso automaticamente.
              // \completion_info::update_ Moodle >= 4.0 ?
              return array('success' => true);
         } catch (\Exception $e) {
-            \core\session\manager::write_close(); // Release session lock early
+            \core\session\manager::write_close(); // Libera o bloqueio da sessão mais cedo
              return array(
                  'success' => false,
                  'message' => get_string('error_cannotmarkcomplete', 'mod_bunnyvideo') . ' (' . $e->getMessage() . ')'
@@ -81,59 +81,59 @@ class completion_ajax extends \external_api {
     }
 
     /**
-     * Define the return value for the mark_complete function.
+     * Define o valor de retorno para a função mark_complete.
      * @return \external_single_structure
      */
     public static function mark_complete_returns() {
         return new \external_single_structure(
             array(
-                'success' => new \external_value(PARAM_BOOL, 'True if the completion was marked successfully'),
-                'message' => new \external_value(PARAM_TEXT, 'Optional message (e.g., error details)', VALUE_OPTIONAL)
+                'success' => new \external_value(PARAM_BOOL, 'Verdadeiro se a conclusão foi marcada com sucesso'),
+                'message' => new \external_value(PARAM_TEXT, 'Mensagem opcional (ex: detalhes do erro)', VALUE_OPTIONAL)
             )
         );
     }
 
     /**
-     * Define parameters for the toggle_completion function.
+     * Define os parâmetros para a função toggle_completion.
      * @return \external_function_parameters
      */
     public static function toggle_completion_parameters() {
         return new \external_function_parameters(
             array(
-                'cmid' => new \external_value(PARAM_INT, 'The course module ID'),
-                'userid' => new \external_value(PARAM_INT, 'The user ID to toggle completion for'),
-                'newstate' => new \external_value(PARAM_INT, 'The new completion state (0=incomplete, 1=complete)')
+                'cmid' => new \external_value(PARAM_INT, 'O ID do módulo do curso'),
+                'userid' => new \external_value(PARAM_INT, 'O ID do usuário para alternar a conclusão'),
+                'newstate' => new \external_value(PARAM_INT, 'O novo estado de conclusão (0=incompleto, 1=completo)')
             )
         );
     }
 
     /**
-     * Toggle completion status for a specified user (teacher/admin only).
-     * @param int $cmid Course module ID.
-     * @param int $userid User ID to toggle completion for.
-     * @param int $newstate New completion state (0=incomplete, 1=complete).
-     * @return array Success status and optional message.
+     * Alterna o status de conclusão para um usuário especificado (somente professor/admin).
+     * @param int $cmid ID do módulo do curso.
+     * @param int $userid ID do usuário para alternar a conclusão.
+     * @param int $newstate Novo estado de conclusão (0=incompleto, 1=completo).
+     * @return array Status de sucesso e mensagem opcional.
      */
     public static function toggle_completion($cmid, $userid, $newstate) {
         global $DB, $CFG;
 
-        // Validate parameters.
+        // Valida os parâmetros.
         $params = self::validate_parameters(self::toggle_completion_parameters(), array(
             'cmid' => $cmid,
             'userid' => $userid,
             'newstate' => $newstate
         ));
 
-        // Get course module, context and course.
+        // Obtém o módulo do curso, contexto e curso.
         $cm = get_coursemodule_from_id('bunnyvideo', $params['cmid'], 0, false, MUST_EXIST);
         $context = \context_module::instance($cm->id);
         self::validate_context($context);
         $course = $DB->get_record('course', array('id' => $cm->course), '*', MUST_EXIST);
 
-        // Check capabilities to toggle completion for another user.
+        // Verifica as capacidades para alternar a conclusão de outro usuário.
         require_capability('mod/bunnyvideo:managecompletion', $context);
 
-        // Get completion info.
+        // Obtém informações de conclusão.
         $completion = new \completion_info($course);
         if (!$completion->is_enabled($cm)) {
             return array(
@@ -151,18 +151,18 @@ class completion_ajax extends \external_api {
         $currentdata = $completion->get_data($cm, true, $params['userid']); // Forçar recarregamento
         debugging('BunnyVideo - Estado atual: ' . $currentdata->completionstate . 
                  ' - Tentando alterar para: ' . $params['newstate'], DEBUG_DEVELOPER);
-		// Map the newstate parameter to Moodle completion constants
+		// Mapeia o parâmetro newstate para as constantes de conclusão do Moodle
 		$completionstate = ($newstate == 1) ? COMPLETION_COMPLETE : COMPLETION_INCOMPLETE;
 
 		try {
-			// Update the completion state using the Moodle API
+			// Atualiza o estado de conclusão usando a API do Moodle
 			$completion->update_state($cm, $completionstate, $userid, true);
 
-			// Clear the completion cache
+			// Limpa o cache de conclusão
 			$cache = \cache::make('core', 'completion');
 			$cache->purge();
 
-			// Optionally clear the navigation cache if needed
+			// Opcionalmente, limpa o cache de navegação se necessário
 			// $cache = \cache::make('core', 'navigation_course');
 			// $cache->purge();
 
@@ -182,14 +182,14 @@ class completion_ajax extends \external_api {
     }
 
     /**
-     * Define the return value for the toggle_completion function.
+     * Define o valor de retorno para a função toggle_completion.
      * @return \external_single_structure
      */
     public static function toggle_completion_returns() {
         return new \external_single_structure(
             array(
-                'success' => new \external_value(PARAM_BOOL, 'True if the completion was toggled successfully'),
-                'message' => new \external_value(PARAM_TEXT, 'Status message or error details', VALUE_OPTIONAL)
+                'success' => new \external_value(PARAM_BOOL, 'Verdadeiro se a conclusão foi alternada com sucesso'),
+                'message' => new \external_value(PARAM_TEXT, 'Mensagem de status ou detalhes do erro', VALUE_OPTIONAL)
             )
         );
     }

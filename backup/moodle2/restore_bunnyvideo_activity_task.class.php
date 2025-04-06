@@ -12,7 +12,7 @@ class restore_bunnyvideo_activity_task extends restore_activity_task {
     }
 
     static public function decode_content_links($content) {
-         return $content; // Placeholder
+         return $content; // Marcador de posição
     }
 
     static public function decode_content_links_caller($function) {

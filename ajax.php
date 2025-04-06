@@ -1,36 +1,36 @@
 <?php
-// This file is part of Moodle - http://moodle.org/
+// Este arquivo é parte do Moodle - http://moodle.org/
 //
-// Moodle is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
+// O Moodle é software livre: você pode redistribuí-lo e/ou modificá-lo
+// sob os termos da Licença Pública Geral GNU conforme publicada pela
+// Free Software Foundation, seja a versão 3 da Licença, ou
+// (a seu critério) qualquer versão posterior.
 //
-// Moodle is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
+// O Moodle é distribuído na esperança de que seja útil,
+// mas SEM QUALQUER GARANTIA; sem mesmo a garantia implícita de
+// COMERCIALIZAÇÃO ou ADEQUAÇÃO A UM DETERMINADO FIM. Consulte a
+// Licença Pública Geral GNU para obter mais detalhes.
 //
-// You should have received a copy of the GNU General Public License
-// along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
+// Você deve ter recebido uma cópia da Licença Pública Geral GNU
+// junto com o Moodle. Caso contrário, consulte <http://www.gnu.org/licenses/>.
 
 /**
- * AJAX handler for Bunny Video player operations
+ * Manipulador AJAX para operações do player de vídeo Bunny
  *
  * @package    mod_bunnyvideo
  * @copyright  2025 Marcos Bellezi
- * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 ou posterior
  */
 
 define('AJAX_SCRIPT', true);
 require_once('../../config.php');
 require_once($CFG->libdir . '/completionlib.php');
 
-// Get and validate parameters
+// Obtém e valida os parâmetros
 $action = required_param('action', PARAM_ALPHA);
 $cmid = required_param('cmid', PARAM_INT);
 
-// Debug output for troubleshooting
+// Saída de depuração para solução de problemas
 $response = array('success' => false, 'message' => '');
 $response['debug'] = array(
     'received_action' => $action,
@@ -41,39 +41,39 @@ $response['debug'] = array(
     'raw_input' => file_get_contents('php://input')
 );
 
-// Require a valid session key
+// Requer uma chave de sessão válida
 require_sesskey();
 
-// Validate course module
+// Valida o módulo do curso
 $cm = get_coursemodule_from_id('bunnyvideo', $cmid, 0, false, MUST_EXIST);
 $course = $DB->get_record('course', array('id' => $cm->course), '*', MUST_EXIST);
 $bunnyvideo = $DB->get_record('bunnyvideo', array('id' => $cm->instance), '*', MUST_EXIST);
 
-// Setup proper context
+// Configura o contexto apropriado
 $context = context_module::instance($cm->id);
 $PAGE->set_context($context);
 
-// Check user is logged in
+// Verifica se o usuário está logado
 require_login($course, false, $cm);
 
-// Prepare response
+// Prepara a resposta
 
 if ($action === 'mark_complete' || $action === 'markcomplete') {
-    // Check if completion is enabled for this course and module
+    // Verifica se a conclusão está habilitada para este curso e módulo
     $completion = new completion_info($course);
     
     if (!$completion->is_enabled($cm)) {
         $response['message'] = get_string('completionnotenabled', 'completion');
     } else {
-        // Save the current state to check if it's already complete
+        // Salva o estado atual para verificar se já está concluído
         $current = $completion->get_data($cm, false, $USER->id);
         $was_complete = $current->completionstate == COMPLETION_COMPLETE;
         
-        // Mark module as completed
+        // Marca o módulo como concluído
         $completion->update_state($cm, COMPLETION_COMPLETE);
         $response['success'] = true;
         
-        // Different message based on whether it was already complete
+        // Mensagem diferente com base em se já estava concluído
         if ($was_complete) {
             $response['message'] = get_string('completion-y', 'core_completion');
             $response['already_complete'] = true;
@@ -81,13 +81,13 @@ if ($action === 'mark_complete' || $action === 'markcomplete') {
             $response['message'] = get_string('completed', 'completion');
             $response['already_complete'] = false;
             
-            // We're skipping event logging due to issues with Moodle's badge observer
-            // This doesn't affect the completion functionality
+            // Estamos pulando o registro de eventos devido a problemas com o observador de emblemas do Moodle
+            // Isso não afeta a funcionalidade de conclusão
             $response['event_logged'] = false;
             $response['note'] = 'Event logging skipped to avoid badge observer errors';
             
             /*
-            // Log completion event - DISABLED DUE TO BADGE OBSERVER ISSUES
+            // Registra o evento de conclusão - DESABILITADO DEVIDO A PROBLEMAS COM O OBSERVADOR DE EMBLEMAS
             try {
                 $event = \core\event\course_module_completion_updated::create(array(
                     'objectid' => $cm->id,
@@ -100,7 +100,7 @@ if ($action === 'mark_complete' || $action === 'markcomplete') {
                 $event->trigger();
                 $response['event_logged'] = true;
             } catch (Exception $e) {
-                // Don't let event logging failure prevent completion marking
+                // Não permite que a falha no registro do evento impeça a marcação da conclusão
                 $response['event_error'] = $e->getMessage();
                 $response['event_logged'] = false;
             }
@@ -111,6 +111,6 @@ if ($action === 'mark_complete' || $action === 'markcomplete') {
     $response['message'] = 'Invalid action';
 }
 
-// Always return JSON
+// Sempre retorna JSON
 header('Content-Type: application/json');
 echo json_encode($response);

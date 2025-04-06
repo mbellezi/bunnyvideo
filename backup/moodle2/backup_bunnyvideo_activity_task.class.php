@@ -11,6 +11,6 @@ class backup_bunnyvideo_activity_task extends backup_activity_task {
     }
 
     static public function encode_content_links($content) {
-        return $content; // Placeholder
+        return $content; // Marcador de posição
     }
 }

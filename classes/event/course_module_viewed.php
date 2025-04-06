@@ -4,7 +4,7 @@ namespace mod_bunnyvideo\event;
 defined('MOODLE_INTERNAL') || die();
 
 /**
- * The course module viewed event.
+ * O evento de visualização do módulo do curso.
  */
 class course_module_viewed extends \core\event\course_module_viewed {
 
@@ -14,7 +14,7 @@ class course_module_viewed extends \core\event\course_module_viewed {
     }
 
     /**
-     * Returns relevant URL.
+     * Retorna a URL relevante.
      * @return \moodle_url
      */
     public function get_url() {

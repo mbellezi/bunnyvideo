@@ -1,94 +1,94 @@
 /**
- * AMD Module for handling Bunny Player interaction and completion.
- * VERSION WITH EXTRA LOGGING
+ * Módulo AMD para lidar com a interação e conclusão do Bunny Player.
+ * VERSÃO COM LOGGING EXTRA
  */
 define(['jquery', 'core/ajax', 'core/log', 'core/notification'], function($, Ajax, Log, Notification) {
 
-    // Initialize log module for debugging
-    Log.init({ level: 'debug' }); // Ensure debug level is set
+    // Inicializa o módulo de log para depuração
+    Log.init({ level: 'debug' }); // Garante que o nível de depuração esteja definido
 
-    Log.debug('BunnyVideo: player_handler.js AMD module loaded.');
+    Log.debug('BunnyVideo: Módulo AMD player_handler.js carregado.');
 
-    var playerInstance = null; // Holds the Player.js instance
-    var config = null; // Holds config passed from PHP
-    var maxPercentReached = 0; // Tracks the highest percentage watched
-    var completionSent = false; // Flag to prevent multiple AJAX calls
-    var iframeElement = null; // Reference to the iframe DOM element
+    var playerInstance = null; // Armazena a instância do Player.js
+    var config = null; // Armazena a configuração passada pelo PHP
+    var maxPercentReached = 0; // Rastreia a maior porcentagem assistida
+    var completionSent = false; // Flag para prevenir múltiplas chamadas AJAX
+    var iframeElement = null; // Referência ao elemento DOM do iframe
 
     /**
-     * Send completion status update via AJAX.
+     * Envia a atualização do status de conclusão via AJAX.
      */
     var sendCompletion = function() {
-        Log.debug('BunnyVideo: sendCompletion called. completionSent = ' + completionSent);
+        Log.debug('BunnyVideo: sendCompletion chamado. completionSent = ' + completionSent);
         if (completionSent) {
-            Log.debug('BunnyVideo: Completion already sent for cmid ' + config.cmid + '. Aborting.');
-            return; // Don't send again
+            Log.debug('BunnyVideo: Conclusão já enviada para cmid ' + config.cmid + '. Abortando.');
+            return; // Não envia novamente
         }
 
-        Log.info('BunnyVideo: Threshold reached (' + maxPercentReached.toFixed(2) + '% >= ' + config.completionPercent + '%). Sending completion AJAX for cmid ' + config.cmid);
-        completionSent = true; // Set flag immediately
+        Log.info('BunnyVideo: Limite atingido (' + maxPercentReached.toFixed(2) + '% >= ' + config.completionPercent + '%). Enviando AJAX de conclusão para cmid ' + config.cmid);
+        completionSent = true; // Define a flag imediatamente
 
         var promises = Ajax.call([{
             methodname: 'mod_bunnyvideo_mark_complete',
             args: { cmid: config.cmid },
             done: function(response) {
-                Log.debug('BunnyVideo: AJAX done callback received.', response);
+                Log.debug('BunnyVideo: Callback AJAX done recebido.', response);
                 if (response.success) {
-                    Log.info('BunnyVideo: Completion successfully marked via AJAX for cmid ' + config.cmid);
-                    // Optionally update UI or trigger Moodle JS completion event
+                    Log.info('BunnyVideo: Conclusão marcada com sucesso via AJAX para cmid ' + config.cmid);
+                    // Opcionalmente, atualiza a UI ou dispara evento de conclusão JS do Moodle
                 } else {
-                    Log.warn('BunnyVideo: AJAX call reported failure for cmid ' + config.cmid + ': ' + (response.message || 'No message'));
-                    Notification.add(response.message || 'Error marking activity complete.', { type: 'error' });
-                    completionSent = false; // Allow retry on error? Risky.
+                    Log.warn('BunnyVideo: Chamada AJAX reportou falha para cmid ' + config.cmid + ': ' + (response.message || 'Sem mensagem'));
+                    Notification.add(response.message || 'Erro ao marcar atividade como concluída.', { type: 'error' });
+                    completionSent = false; // Permitir nova tentativa em caso de erro? Arriscado.
                 }
             },
             fail: function(ex) {
-                Log.error('BunnyVideo: AJAX call failed for cmid ' + config.cmid, ex);
+                Log.error('BunnyVideo: Chamada AJAX falhou para cmid ' + config.cmid, ex);
                 Notification.exception(ex);
-                completionSent = false; // Allow retry on error? Risky.
+                completionSent = false; // Permitir nova tentativa em caso de erro? Arriscado.
             }
         }]);
 
-        // Handle potential promise errors
+        // Lida com possíveis erros de promise
         if (promises && promises[0] && typeof promises[0].catch === 'function') {
             promises[0].catch(function(ex) {
-                 Log.error('BunnyVideo: AJAX promise failed for cmid ' + config.cmid, ex);
+                 Log.error('BunnyVideo: Promise AJAX falhou para cmid ' + config.cmid, ex);
                  Notification.exception(ex);
-                 completionSent = false; // Allow retry
+                 completionSent = false; // Permitir nova tentativa
             });
         } else {
-             Log.debug('BunnyVideo: Ajax.call did not return a promise or promise array.');
+             Log.debug('BunnyVideo: Ajax.call não retornou uma promise ou array de promises.');
         }
     };
 
     /**
-     * Event listener for player time updates.
+     * Listener de evento para atualizações de tempo do player.
      */
     var onTimeUpdate = function() {
-        // Log less frequently to avoid flooding console? Maybe only every few seconds?
-        // For now, log every time for debugging.
-        // Log.debug('BunnyVideo: onTimeUpdate fired.');
+        // Registrar com menos frequência para evitar inundar o console? Talvez apenas a cada poucos segundos?
+        // Por enquanto, registra todas as vezes para depuração.
+        // Log.debug('BunnyVideo: onTimeUpdate disparado.');
 
         if (!playerInstance || !config || config.completionPercent <= 0) {
-            // Log.debug('BunnyVideo: onTimeUpdate - Aborting (no player, no config, or completion % is 0)');
+            // Log.debug('BunnyVideo: onTimeUpdate - Abortando (sem player, sem config ou % de conclusão é 0)');
             return;
         }
         if (completionSent) {
-             // Log.debug('BunnyVideo: onTimeUpdate - Aborting (completion already sent)');
+             // Log.debug('BunnyVideo: onTimeUpdate - Abortando (conclusão já enviada)');
              return;
         }
 
 
         try {
-            // Use a default value of 0 if API returns NaN or undefined
+            // Usa um valor padrão de 0 se a API retornar NaN ou undefined
             var currentTime = playerInstance.api('currentTime') || 0;
             var duration = playerInstance.api('duration') || 0;
 
             // Log.debug('BunnyVideo: timeupdate - currentTime: ' + currentTime + ', duration: ' + duration);
 
-            // Player might not be ready or duration might be unknown (live streams?)
+            // O player pode não estar pronto ou a duração pode ser desconhecida (transmissões ao vivo?)
             if (duration <= 0) {
-                // Log.debug('BunnyVideo: onTimeUpdate - Aborting (duration <= 0)');
+                // Log.debug('BunnyVideo: onTimeUpdate - Abortando (duração <= 0)');
                 return;
             }
 
@@ -96,133 +96,133 @@ define(['jquery', 'core/ajax', 'core/log', 'core/notification'], function($, Aja
 
             if (currentPercent > maxPercentReached) {
                 maxPercentReached = currentPercent;
-                Log.debug('BunnyVideo: Max percent watched updated: ' + maxPercentReached.toFixed(2) + '% for cmid ' + config.cmid);
+                Log.debug('BunnyVideo: Porcentagem máxima assistida atualizada: ' + maxPercentReached.toFixed(2) + '% para cmid ' + config.cmid);
             }
 
             if (maxPercentReached >= config.completionPercent) {
-                Log.debug('BunnyVideo: onTimeUpdate - Threshold met. Calling sendCompletion.');
+                Log.debug('BunnyVideo: onTimeUpdate - Limite atingido. Chamando sendCompletion.');
                 sendCompletion();
             }
         } catch (e) {
-            // Catch errors if Player.js API calls fail (e.g., player destroyed)
-             Log.warn('BunnyVideo: Error accessing Player.js API during timeupdate:', e);
-             // Detach listener if player seems broken?
+            // Captura erros se as chamadas da API Player.js falharem (ex: player destruído)
+             Log.warn('BunnyVideo: Erro ao acessar a API Player.js durante timeupdate:', e);
+             // Desanexar listener se o player parecer quebrado?
              if (playerInstance && typeof playerInstance.off === 'function') {
-                 Log.warn('BunnyVideo: Detaching timeupdate listener due to error.');
+                 Log.warn('BunnyVideo: Desanexando listener timeupdate devido a erro.');
                  playerInstance.off('timeupdate', onTimeUpdate);
              }
         }
     };
 
     /**
-      * Event listener for when the player is ready.
+      * Listener de evento para quando o player está pronto.
       */
     var onReady = function() {
-         Log.info('BunnyVideo: Player.js ready event received for cmid ' + config.cmid);
-         // Attach event listeners only when ready
+         Log.info('BunnyVideo: Evento ready do Player.js recebido para cmid ' + config.cmid);
+         // Anexa listeners de evento apenas quando pronto
          try {
             if (playerInstance && config.completionPercent > 0) {
-                 // Check if API methods are available
+                 // Verifica se os métodos da API estão disponíveis
                  if (typeof playerInstance.api('currentTime') !== 'undefined' && typeof playerInstance.api('duration') !== 'undefined') {
-                     Log.debug('BunnyVideo: Player ready - Attaching timeupdate listener for cmid ' + config.cmid);
+                     Log.debug('BunnyVideo: Player pronto - Anexando listener timeupdate para cmid ' + config.cmid);
                      playerInstance.on('timeupdate', onTimeUpdate);
                  } else {
-                      Log.warn('BunnyVideo: Player ready, but time/duration API methods seem unavailable. Cannot track progress.');
+                      Log.warn('BunnyVideo: Player pronto, mas métodos da API de tempo/duração parecem indisponíveis. Não é possível rastrear o progresso.');
                  }
             } else {
-                 Log.debug('BunnyVideo: Player ready, but completion tracking is disabled (completionPercent=' + config.completionPercent + ')');
+                 Log.debug('BunnyVideo: Player pronto, mas rastreamento de conclusão está desabilitado (completionPercent=' + config.completionPercent + ')');
             }
-            // You can add other listeners here (play, pause, end, etc.) if needed
-            // playerInstance.on('play', function() { Log.debug('BunnyVideo: Play event fired.'); });
-            // playerInstance.on('pause', function() { Log.debug('BunnyVideo: Pause event fired.'); });
-            // playerInstance.on('ended', function() { Log.debug('BunnyVideo: Ended event fired.'); });
+            // Você pode adicionar outros listeners aqui (play, pause, end, etc.) se necessário
+            // playerInstance.on('play', function() { Log.debug('BunnyVideo: Evento play disparado.'); });
+            // playerInstance.on('pause', function() { Log.debug('BunnyVideo: Evento pause disparado.'); });
+            // playerInstance.on('ended', function() { Log.debug('BunnyVideo: Evento ended disparado.'); });
 
          } catch (e) {
-            Log.error('BunnyVideo: Error attaching Player.js event listeners in onReady:', e);
+            Log.error('BunnyVideo: Erro ao anexar listeners de evento Player.js em onReady:', e);
          }
     };
 
      /**
-      * Event listener for player errors.
+      * Listener de evento para erros do player.
       */
      var onError = function(e) {
-         // Log detailed error if possible
-         var errorDetails = e ? JSON.stringify(e) : 'No details';
-         Log.error('BunnyVideo: Player.js error event received for cmid ' + config.cmid + '. Details: ' + errorDetails, e);
-         // Maybe display a user-friendly message
-         // Notification.add('Video player error occurred.', { type: 'error' });
+         // Registra erro detalhado se possível
+         var errorDetails = e ? JSON.stringify(e) : 'Sem detalhes';
+         Log.error('BunnyVideo: Evento de erro Player.js recebido para cmid ' + config.cmid + '. Detalhes: ' + errorDetails, e);
+         // Talvez exibir uma mensagem amigável ao usuário
+         // Notification.add('Ocorreu um erro no player de vídeo.', { type: 'error' });
      };
 
 
-    // Public init function for the module
+    // Função init pública para o módulo
     return {
         init: function(cfg) {
-            config = cfg; // Store config passed from PHP
-            Log.info('BunnyVideo: Initializing player handler. Config received:', config);
+            config = cfg; // Armazena a configuração passada pelo PHP
+            Log.info('BunnyVideo: Inicializando manipulador do player. Configuração recebida:', config);
 
-            if (!config || !config.cmid || !config.contextid) { // Also check contextid
-                 Log.error('BunnyVideo: Initialization failed - Missing configuration (cmid or contextid).');
+            if (!config || !config.cmid || !config.contextid) { // Verifica também contextid
+                 Log.error('BunnyVideo: Falha na inicialização - Configuração ausente (cmid ou contextid).');
                  return;
             }
 
-            // Find the container div added in lib.php
+            // Encontra a div container adicionada em lib.php
             var playerContainerId = 'bunnyvideo-player-' + config.cmid;
             var playerWrapper = document.getElementById(playerContainerId);
-            Log.debug('BunnyVideo: Searching for container #' + playerContainerId);
+            Log.debug('BunnyVideo: Procurando por container #' + playerContainerId);
 
             if (!playerWrapper) {
-                Log.error('BunnyVideo: Container div #' + playerContainerId + ' not found.');
+                Log.error('BunnyVideo: Div container #' + playerContainerId + ' não encontrada.');
                 return;
             } else {
-                 Log.debug('BunnyVideo: Container div found:', playerWrapper);
+                 Log.debug('BunnyVideo: Div container encontrada:', playerWrapper);
             }
 
-            // Find the iframe WITHIN the container
-            // This assumes the embed code pasted by the user contains exactly one iframe matching this src.
+            // Encontra o iframe DENTRO do container
+            // Isso assume que o código de incorporação colado pelo usuário contém exatamente um iframe correspondente a este src.
             iframeElement = playerWrapper.querySelector('iframe[src*="iframe.mediadelivery.net"]');
 
             if (!iframeElement) {
-                Log.error('BunnyVideo: Could not find Bunny iframe within container #' + playerContainerId);
+                Log.error('BunnyVideo: Não foi possível encontrar o iframe Bunny dentro do container #' + playerContainerId);
                 return;
             } else {
-                Log.debug('BunnyVideo: Found iframe element:', iframeElement);
+                Log.debug('BunnyVideo: Elemento iframe encontrado:', iframeElement);
             }
 
-            // Give the iframe a unique ID if it doesn't have one, helps Player.js target it reliably.
+            // Dá ao iframe um ID único se ele não tiver um, ajuda o Player.js a direcioná-lo de forma confiável.
             var iframeId = iframeElement.id || 'bunny_player_iframe_' + config.cmid;
             iframeElement.id = iframeId;
-            Log.debug('BunnyVideo: Ensured iframe has ID: ' + iframeId);
+            Log.debug('BunnyVideo: Garantiu que o iframe tenha o ID: ' + iframeId);
 
 
-            // Initialize Player.js
+            // Inicializa o Player.js
             try {
-                 // Check if Playerjs constructor is available globally
+                 // Verifica se o construtor Playerjs está disponível globalmente
                  if (typeof Playerjs !== 'undefined') {
-                     Log.debug('BunnyVideo: Playerjs global object found. Initializing player for iframe #' + iframeId);
+                     Log.debug('BunnyVideo: Objeto global Playerjs encontrado. Inicializando player para iframe #' + iframeId);
 
-                     // Explicitly initialize Player.js on the found iframe
-                     playerInstance = new Playerjs({id: iframeId}); // Target the specific iframe ID
+                     // Inicializa explicitamente o Player.js no iframe encontrado
+                     playerInstance = new Playerjs({id: iframeId}); // Direciona o ID específico do iframe
 
                      if (playerInstance) {
-                         Log.info('BunnyVideo: Player.js instance created for cmid ' + config.cmid);
-                         // Attach crucial event listeners using the Player.js API
+                         Log.info('BunnyVideo: Instância Player.js criada para cmid ' + config.cmid);
+                         // Anexa listeners de evento cruciais usando a API Player.js
                          playerInstance.on('ready', onReady);
                          playerInstance.on('error', onError);
-                         // Note: timeupdate listener is attached *inside* the onReady callback
+                         // Nota: o listener timeupdate é anexado *dentro* do callback onReady
                      } else {
-                         // This case might happen if new Playerjs({id: ...}) returns null/undefined or throws implicitly
-                         Log.error('BunnyVideo: Failed to create Playerjs instance for iframe #' + iframeId + ' (returned null/undefined?).');
+                         // Este caso pode acontecer se new Playerjs({id: ...}) retornar null/undefined ou lançar implicitamente
+                         Log.error('BunnyVideo: Falha ao criar instância Playerjs para iframe #' + iframeId + ' (retornou null/undefined?).');
                      }
                  } else {
-                      // This is critical - if the library isn't loaded, nothing will work.
-                      Log.error('BunnyVideo: Playerjs library (Playerjs global object) not found. Was the external JS loaded correctly?');
-                      Notification.add('Video player library failed to load.', { type: 'error'});
+                      // Isso é crítico - se a biblioteca não for carregada, nada funcionará.
+                      Log.error('BunnyVideo: Biblioteca Playerjs (objeto global Playerjs) não encontrada. O JS externo foi carregado corretamente?');
+                      Notification.add('Falha ao carregar a biblioteca do player de vídeo.', { type: 'error'});
                  }
 
             } catch (e) {
-                 // Catch errors during 'new Playerjs()' or attaching initial listeners
-                 Log.error('BunnyVideo: Critical error during Playerjs initialization or initial event attachment:', e);
-                 Notification.add('Failed to initialize video player.', { type: 'error'});
+                 // Captura erros durante 'new Playerjs()' ou anexação de listeners iniciais
+                 Log.error('BunnyVideo: Erro crítico durante a inicialização do Playerjs ou anexação inicial de evento:', e);
+                 Notification.add('Falha ao inicializar o player de vídeo.', { type: 'error'});
             }
         }
     };

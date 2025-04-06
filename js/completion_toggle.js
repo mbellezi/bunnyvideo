@@ -1,53 +1,53 @@
-// Bunnyvideo completion toggle handler
-// This script handles the completion toggle button functionality for teachers/admins
+// Manipulador de alternância de conclusão do Bunnyvideo
+// Este script lida com a funcionalidade do botão de alternância de conclusão para professores/admins
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize the completion toggle buttons
+    // Inicializa os botões de alternância de conclusão
     initCompletionToggle();
 });
 
 /**
- * Initialize the completion toggle functionality
+ * Inicializa a funcionalidade de alternância de conclusão
  */
 function initCompletionToggle() {
-    // Find all completion toggle buttons
+    // Encontra todos os botões de alternância de conclusão
     const toggleButtons = document.querySelectorAll('.completion-toggle-button');
     
-    // Add click handler to each button
+    // Adiciona manipulador de clique a cada botão
     toggleButtons.forEach(function(button) {
         button.addEventListener('click', function(e) {
             e.preventDefault();
             
-            // Get data attributes
+            // Obtém atributos de dados
             const cmid = this.getAttribute('data-cmid');
             const userid = this.getAttribute('data-userid');
             let newstate = this.getAttribute('data-newstate');
             
-            // Ensure newstate is explicitly set to 0 for marking as incomplete
+            // Garante que newstate seja explicitamente definido como 0 para marcar como incompleto
             if (newstate === '0') {
                 newstate = 0;
             } else {
                 newstate = 1;
             }
             
-            // Disable button and show loading state
+            // Desabilita o botão e mostra o estado de carregamento
             this.disabled = true;
             const originalText = this.textContent;
             this.textContent = '...';
             
-            // Call the AJAX function to toggle completion
+            // Chama a função AJAX para alternar a conclusão
             toggleCompletion(cmid, userid, newstate, this, originalText);
         });
     });
 }
 
 /**
- * Call the web service to toggle completion status
- * @param {number} cmid - Course module ID
- * @param {number} userid - User ID
- * @param {number} newstate - New completion state (0 or 1)
- * @param {HTMLElement} button - The button element
- * @param {string} originalText - Original button text
+ * Chama o serviço web para alternar o status de conclusão
+ * @param {number} cmid - ID do módulo do curso
+ * @param {number} userid - ID do usuário
+ * @param {number} newstate - Novo estado de conclusão (0 ou 1)
+ * @param {HTMLElement} button - O elemento botão
+ * @param {string} originalText - Texto original do botão
  */
 function toggleCompletion(cmid, userid, newstate, button, originalText) {
     // Assegurar que os valores sejam numéricos e não strings
@@ -55,9 +55,9 @@ function toggleCompletion(cmid, userid, newstate, button, originalText) {
     const useridInt = parseInt(userid, 10);
     const newstateInt = parseInt(newstate, 10);
     
-    console.log('BunnyVideo - Toggle Completion - cmid:', cmidInt, 'userid:', useridInt, 'newstate:', newstateInt);
+    console.log('BunnyVideo - Alternar Conclusão - cmid:', cmidInt, 'userid:', useridInt, 'newstate:', newstateInt);
     
-    // Prepare the request
+    // Prepara a requisição
     const request = {
         methodname: 'mod_bunnyvideo_toggle_completion',
         args: {
@@ -67,12 +67,12 @@ function toggleCompletion(cmid, userid, newstate, button, originalText) {
         }
     };
     
-    // Use Moodle's AJAX framework
+    // Usa o framework AJAX do Moodle
     require(['core/ajax'], function(ajax) {
         ajax.call([request])[0].done(function(response) {
-            console.log('BunnyVideo - Toggle Response:', response);
+            console.log('BunnyVideo - Resposta da Alternância:', response);
             if (response.success) {
-                // Success - reload the page with cache-busting parameter to ensure menu updates
+                // Sucesso - recarrega a página com parâmetro de cache-busting para garantir atualizações do menu
                 console.log('BunnyVideo - Operação bem-sucedida, recarregando página');
                 
                 // Forçar recarga completa da página para atualizar o menu lateral
@@ -103,39 +103,39 @@ function toggleCompletion(cmid, userid, newstate, button, originalText) {
                 // Recarregar a página com novos parâmetros
                 window.location.href = reloadUrl;
             } else {
-                // Error - restore button and show error
+                // Erro - restaura o botão e mostra o erro
                 button.disabled = false;
                 button.textContent = originalText;
                 
-                // Show error notification if available
+                // Mostra notificação de erro se disponível
                 if (require.defined('core/notification')) {
                     require(['core/notification'], function(notification) {
                         notification.addNotification({
-                            message: response.message || 'Error toggling completion status',
+                            message: response.message || 'Erro ao alternar o status de conclusão',
                             type: 'error'
                         });
                     });
                 } else {
-                    // Fallback to alert if notification module not available
-                    alert(response.message || 'Error toggling completion status');
+                    // Fallback para alert se o módulo de notificação não estiver disponível
+                    alert(response.message || 'Erro ao alternar o status de conclusão');
                 }
             }
         }).fail(function(error) {
-            // Network or other failure
+            // Falha de rede ou outra falha
             button.disabled = false;
             button.textContent = originalText;
             
-            // Show error notification if available
+            // Mostra notificação de erro se disponível
             if (require.defined('core/notification')) {
                 require(['core/notification'], function(notification) {
                     notification.addNotification({
-                        message: 'Network error: ' + error.message,
+                        message: 'Erro de rede: ' + error.message,
                         type: 'error'
                     });
                 });
             } else {
-                // Fallback to alert if notification module not available
-                alert('Network error: ' + error.message);
+                // Fallback para alert se o módulo de notificação não estiver disponível
+                alert('Erro de rede: ' + error.message);
             }
         });
     });

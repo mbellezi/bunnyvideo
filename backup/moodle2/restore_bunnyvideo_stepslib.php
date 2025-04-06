@@ -1,7 +1,7 @@
 <?php
 defined('MOODLE_INTERNAL') || die();
 
-// Basic restore step. Usually more logic is needed if there are related files/data.
+// Passo básico de restauração. Geralmente, mais lógica é necessária se houver arquivos/dados relacionados.
 class restore_bunnyvideo_activity_structure_step extends restore_activity_structure_step {
 
     protected function define_structure() {
@@ -17,15 +17,15 @@ class restore_bunnyvideo_activity_structure_step extends restore_activity_struct
         $oldid = $data->id;
         $data->course = $this->get_courseid();
 
-        // Adjust intro format and links if necessary using restore plan context
+        // Ajusta o formato da introdução e os links, se necessário, usando o contexto do plano de restauração
         $data->introformat = $this->apply_date_offset($data->introformat);
         $data->intro = $this->apply_content_links($data->intro);
 
         $data->timecreated = $this->apply_date_offset($data->timecreated);
         $data->timemodified = $this->apply_date_offset($data->timemodified);
 
-        // Insert the database record
+        // Insere o registro no banco de dados
         $newitemid = $DB->insert_record('bunnyvideo', $data);
-        $this->apply_activity_instance($newitemid); // Map old id to new id
+        $this->apply_activity_instance($newitemid); // Mapeia o ID antigo para o novo ID
     }
 }

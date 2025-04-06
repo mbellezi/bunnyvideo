@@ -8,15 +8,15 @@ $functions = array(
         'description'   => 'Marks the Bunny Video activity as complete for the current user.',
         'type'          => 'write', // Indicates it modifies data
         'ajax'          => true,    // Available via AJAX
-        'capabilities'  => 'mod/bunnyvideo:view', // User needs at least view capability
+        'capabilities'  => 'mod/bunnyvideo:view', // Usuário precisa pelo menos da capacidade de visualização
     ),
     
     'mod_bunnyvideo_toggle_completion' => array(
         'classname'     => 'mod_bunnyvideo\external\completion_ajax',
         'methodname'    => 'toggle_completion',
-        'description'   => 'Toggles completion status of a Bunny Video activity for any user (teacher/admin only).',
-        'type'          => 'write', // Indicates it modifies data
-        'ajax'          => true,    // Available via AJAX
-        'capabilities'  => 'mod/bunnyvideo:managecompletion', // Requires special capability
+        'description'   => 'Alterna o status de conclusão de uma atividade Bunny Video para qualquer usuário (somente professor/admin).',
+        'type'          => 'write', // Indica que modifica os dados
+        'ajax'          => true,    // Disponível via AJAX
+        'capabilities'  => 'mod/bunnyvideo:managecompletion', // Requer capacidade especial
     )
 );

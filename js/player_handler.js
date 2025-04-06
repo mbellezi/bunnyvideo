@@ -1,26 +1,26 @@
 /**
- * Standalone JavaScript for handling Bunny Player interaction and completion.
- * Using plain JS without any module system to avoid conflicts with RequireJS.
+ * JavaScript independente para lidar com a interação e conclusão do Bunny Player.
+ * Usando JS puro sem nenhum sistema de módulos para evitar conflitos com o RequireJS.
  */
 
-// Debug configuration - modify these values to control logging and debug UI
+// Configuração de depuração - modifique esses valores para controlar o registro e a UI de depuração
 var BunnyVideoDebugConfig = {
-    // Debug level: 0=none, 1=errors only, 2=important (errors+success), 3=all logs
+    // Nível de depuração: 0=nenhum, 1=apenas erros, 2=importante (erros+sucesso), 3=todos os logs
     debugLevel: 1,
     
-    // Show debug UI elements like the manual completion button
+    // Mostrar elementos da UI de depuração, como o botão de conclusão manual
     showDebugUI: false,
     
-    // Resolution for time tracking (in seconds) - smaller values are more accurate but consume more memory
+    // Resolução para rastreamento de tempo (em segundos) - valores menores são mais precisos, mas consomem mais memória
     timeTrackingResolution: 1
 };
 
-// Simple debug logging helper with levels - always show important messages
+// Auxiliar de registro de depuração simples com níveis - sempre mostra mensagens importantes
 function bunnyVideoLog(msg, data, level) {
     level = level || 'info';
     var prefix = '';
     
-    // Use emoji for different log levels
+    // Usa emoji para diferentes níveis de log
     if (level === 'debug') prefix = '🔍 ';
     if (level === 'info') prefix = 'ℹ️ ';
     if (level === 'warn') prefix = '⚠️ ';
@@ -30,23 +30,23 @@ function bunnyVideoLog(msg, data, level) {
     if (window.console && window.console.log) {
         var message = prefix + "BunnyVideo: " + msg;
         
-        // Always show important messages regardless of level
+        // Sempre mostra mensagens importantes, independentemente do nível
         var isImportant = level === 'error' || level === 'success' || 
                           level === 'warn' || msg.indexOf('Complete') !== -1;
         
-        // Determine if we should log based on debug level
+        // Determina se devemos registrar com base no nível de depuração
         var shouldLog = false;
         
-        // Level 0: No logging
-        // Level 1: Errors only
+        // Nível 0: Sem registro
+        // Nível 1: Apenas erros
         if (BunnyVideoDebugConfig.debugLevel >= 1 && level === 'error') {
             shouldLog = true;
         }
-        // Level 2: Important logs (errors, warnings, success)
+        // Nível 2: Logs importantes (erros, avisos, sucesso)
         else if (BunnyVideoDebugConfig.debugLevel >= 2 && isImportant) {
             shouldLog = true;
         }
-        // Level 3: All logs
+        // Nível 3: Todos os logs
         else if (BunnyVideoDebugConfig.debugLevel >= 3) {
             shouldLog = true;
         }
@@ -61,9 +61,9 @@ function bunnyVideoLog(msg, data, level) {
     }
 }
 
-// Global object for our handler - no AMD, no UMD, just plain global
+// Objeto global para nosso manipulador - sem AMD, sem UMD, apenas global puro
 window.BunnyVideoHandler = {
-    // State variables
+    // Variáveis de estado
     playerInstance: null,
     config: null,
     maxPercentReached: 0,
@@ -71,36 +71,36 @@ window.BunnyVideoHandler = {
     progressTimer: null,
     playerReady: false,
     
-    // Time tracking variables
-    watchedSegments: [], // Array of watched time ranges [start, end]
-    lastPosition: null,  // Last position for tracking continuous watching
-    lastUpdateTime: null, // Timestamp of last update for handling inactive tabs
-    actualTimeWatched: 0, // Total seconds actually watched (accounting for skips)
+    // Variáveis de rastreamento de tempo
+    watchedSegments: [], // Array de intervalos de tempo assistidos [início, fim]
+    lastPosition: null,  // Última posição para rastrear a visualização contínua
+    lastUpdateTime: null, // Timestamp da última atualização para lidar com abas inativas
+    actualTimeWatched: 0, // Total de segundos realmente assistidos (contabilizando saltos)
     
-    // Send completion status update via AJAX
+    // Envia atualização do status de conclusão via AJAX
     sendCompletion: function() {
         if (this.completionSent) {
-            bunnyVideoLog('Completion already sent for cmid ' + this.config.cmid, null, 'debug');
+            bunnyVideoLog('Conclusão já enviada para cmid ' + this.config.cmid, null, 'debug');
             return;
         }
         
-        bunnyVideoLog('COMPLETION THRESHOLD REACHED (' + this.maxPercentReached.toFixed(1) + '% ≥ ' + 
+        bunnyVideoLog('LIMITE DE CONCLUSÃO ATINGIDO (' + this.maxPercentReached.toFixed(1) + '% ≥ ' + 
                 this.config.completionPercent + '%)', null, 'success');
         this.completionSent = true;
         
-        // Use standard fetch for AJAX call
+        // Usa fetch padrão para chamada AJAX
         var ajaxUrl = M.cfg.wwwroot + '/mod/bunnyvideo/ajax.php';
         
-        // Use URLSearchParams for simpler serialization compatible with PHP's $_POST
+        // Usa URLSearchParams para serialização mais simples compatível com $_POST do PHP
         var params = new URLSearchParams();
         params.append('action', 'mark_complete');
         params.append('cmid', this.config.cmid);
         params.append('sesskey', M.cfg.sesskey);
         
-        bunnyVideoLog('Sending completion request to: ' + ajaxUrl, null, 'info');
-        bunnyVideoLog('With params: ' + params.toString(), null, 'debug');
+        bunnyVideoLog('Enviando requisição de conclusão para: ' + ajaxUrl, null, 'info');
+        bunnyVideoLog('Com parâmetros: ' + params.toString(), null, 'debug');
         
-        // Try with XMLHttpRequest which is more compatible with Moodle
+        // Tenta com XMLHttpRequest que é mais compatível com o Moodle
         var xhr = new XMLHttpRequest();
         xhr.open('POST', ajaxUrl, true);
         xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
@@ -109,58 +109,58 @@ window.BunnyVideoHandler = {
         var self = this;
         xhr.onload = function() {
             if (xhr.status === 200) {
-                bunnyVideoLog('AJAX response received, status: 200', null, 'debug');
+                bunnyVideoLog('Resposta AJAX recebida, status: 200', null, 'debug');
                 try {
                     var data = JSON.parse(xhr.responseText);
-                    bunnyVideoLog('Parsed AJAX response:', data, 'debug');
+                    bunnyVideoLog('Resposta AJAX parseada:', data, 'debug');
                     
                     if (data.success) {
                         if (data.already_complete) {
-                            bunnyVideoLog('Activity was already marked as complete', null, 'info');
+                            bunnyVideoLog('Atividade já estava marcada como concluída', null, 'info');
                         } else {
-                            bunnyVideoLog('Activity was just marked as complete', null, 'success');
+                            bunnyVideoLog('Atividade acabou de ser marcada como concluída', null, 'success');
                         }
                     } else {
-                        bunnyVideoLog('AJAX call failed: ' + (data.message || 'No message'), data, 'error');
+                        bunnyVideoLog('Chamada AJAX falhou: ' + (data.message || 'Sem mensagem'), data, 'error');
                         self.completionSent = false;
                     }
                 } catch (e) {
-                    bunnyVideoLog('Error parsing AJAX response:', e, 'error');
+                    bunnyVideoLog('Erro ao parsear resposta AJAX:', e, 'error');
                     self.completionSent = false;
                 }
             } else {
-                bunnyVideoLog('AJAX request failed with status: ' + xhr.status, null, 'error');
+                bunnyVideoLog('Requisição AJAX falhou com status: ' + xhr.status, null, 'error');
                 self.completionSent = false;
             }
         };
         
         xhr.onerror = function() {
-            bunnyVideoLog('AJAX network error occurred', null, 'error');
+            bunnyVideoLog('Erro de rede AJAX ocorrido', null, 'error');
             self.completionSent = false;
         };
         
         xhr.send(params.toString());
         
-        // Also show a visual indicator
+        // Também mostra um indicador visual
         this.showCompletionIndicator();
     },
     
-    // For debugging - manually trigger completion
+    // Para depuração - dispara manualmente a conclusão
     debugTriggerCompletion: function() {
-        bunnyVideoLog('Manually triggering completion for debugging', null, 'warn');
+        bunnyVideoLog('Disparando conclusão manualmente para depuração', null, 'warn');
         this.maxPercentReached = this.config.completionPercent;
         this.sendCompletion();
     },
     
-    // Process timeupdate events from the player
+    // Processa eventos timeupdate do player
     onTimeUpdate: function(timingData) {
         if (!this.config) {
-            bunnyVideoLog('No config available', null, 'error');
+            bunnyVideoLog('Sem configuração disponível', null, 'error');
             return;
         }
         
         if (this.config.completionPercent <= 0) {
-            bunnyVideoLog('Completion percentage not set or zero', null, 'debug');
+            bunnyVideoLog('Porcentagem de conclusão não definida ou zero', null, 'debug');
             return; 
         }
         
@@ -169,31 +169,31 @@ window.BunnyVideoHandler = {
         }
         
         try {
-            bunnyVideoLog('Received timeupdate event', timingData, 'debug');
+            bunnyVideoLog('Evento timeupdate recebido', timingData, 'debug');
             
-            // Parse the data if it's a string
+            // Parseia os dados se for uma string
             if (typeof timingData === 'string') {
                 timingData = JSON.parse(timingData);
             }
             
-            // Different player.js implementations might have different data formats
+            // Diferentes implementações de player.js podem ter formatos de dados diferentes
             var currentTime, duration;
             
-            // Check if the data has standard player.js format
+            // Verifica se os dados têm o formato padrão do player.js
             if (timingData && typeof timingData.seconds !== 'undefined' && typeof timingData.duration !== 'undefined') {
-                bunnyVideoLog('Using standard Player.js data format', null, 'debug');
+                bunnyVideoLog('Usando formato de dados padrão do Player.js', null, 'debug');
                 currentTime = parseFloat(timingData.seconds);
                 duration = parseFloat(timingData.duration);
             } 
-            // Some implementations might use a different format
+            // Algumas implementações podem usar um formato diferente
             else if (timingData && typeof timingData.currentTime !== 'undefined' && typeof timingData.duration !== 'undefined') {
-                bunnyVideoLog('Using alternate data format with currentTime', null, 'debug');
+                bunnyVideoLog('Usando formato de dados alternativo com currentTime', null, 'debug');
                 currentTime = parseFloat(timingData.currentTime);
                 duration = parseFloat(timingData.duration);
             }
-            // If all else fails, try to extract from possible other formats
+            // Se tudo mais falhar, tenta extrair de possíveis outros formatos
             else if (timingData) {
-                // Try to find any properties that might contain time information
+                // Tenta encontrar quaisquer propriedades que possam conter informações de tempo
                 for (var key in timingData) {
                     var value = timingData[key];
                     if (typeof value === 'number' || (typeof value === 'string' && !isNaN(parseFloat(value)))) {
@@ -206,43 +206,43 @@ window.BunnyVideoHandler = {
                 }
             }
             
-            // If we have both time values, we can update progress
+            // Se tivermos ambos os valores de tempo, podemos atualizar o progresso
             if (!isNaN(currentTime) && !isNaN(duration) && duration > 0) {
                 var currentTimeRounded = Math.round(currentTime / BunnyVideoDebugConfig.timeTrackingResolution) * BunnyVideoDebugConfig.timeTrackingResolution;
                 var percentWatched = (currentTime / duration) * 100;
                 
-                // Still track maxPercentReached for debugging but don't use it for completion
+                // Ainda rastreia maxPercentReached para depuração, mas não usa para conclusão
                 if (percentWatched > this.maxPercentReached) {
                     this.maxPercentReached = percentWatched;
                     
-                    bunnyVideoLog('Current position: ' + percentWatched.toFixed(1) + '%, max: ' + 
-                            this.maxPercentReached.toFixed(1) + '%, target: ' + this.config.completionPercent + '%', 
+                    bunnyVideoLog('Posição atual: ' + percentWatched.toFixed(1) + '%, máx: ' + 
+                            this.maxPercentReached.toFixed(1) + '%, alvo: ' + this.config.completionPercent + '%', 
                             null, 'info');
                 }
                 
-                // Track actual time watched with segments
+                // Rastreia o tempo real assistido com segmentos
                 this.updateWatchedTime(currentTimeRounded);
                 
-                // Calculate the percentage of actual time watched
+                // Calcula a porcentagem do tempo real assistido
                 var percentOfActualTimeWatched = (this.actualTimeWatched / duration) * 100;
                 
-                // Log actual watched time information
-                bunnyVideoLog('Actual time watched: ' + this.formatTime(this.actualTimeWatched) + 
-                       ' (' + percentOfActualTimeWatched.toFixed(1) + '% of ' + this.formatTime(duration) + ')', 
+                // Registra informações do tempo real assistido
+                bunnyVideoLog('Tempo real assistido: ' + this.formatTime(this.actualTimeWatched) + 
+                       ' (' + percentOfActualTimeWatched.toFixed(1) + '% de ' + this.formatTime(duration) + ')', 
                        null, BunnyVideoDebugConfig.debugLevel >= 3 ? 'debug' : 'info');
                 
-                // ONLY use actual time watched for completion, not maxPercentReached
+                // Usa APENAS o tempo real assistido para a conclusão, não maxPercentReached
                 if (percentOfActualTimeWatched >= this.config.completionPercent) {
-                    bunnyVideoLog('COMPLETION THRESHOLD REACHED based on actual time watched!', null, 'success');
+                    bunnyVideoLog('LIMITE DE CONCLUSÃO ATINGIDO com base no tempo real assistido!', null, 'success');
                     this.sendCompletion();
                 }
             }
         } catch (e) {
-            bunnyVideoLog('Error processing timeupdate:', e, 'error');
+            bunnyVideoLog('Erro ao processar timeupdate:', e, 'error');
         }
     },
     
-    // Format time in seconds to MM:SS format
+    // Formata o tempo em segundos para o formato MM:SS
     formatTime: function(seconds) {
         if (isNaN(seconds)) return "00:00";
         seconds = Math.floor(seconds);
@@ -251,62 +251,62 @@ window.BunnyVideoHandler = {
         return (minutes < 10 ? "0" : "") + minutes + ":" + (seconds < 10 ? "0" : "") + seconds;
     },
     
-    // Update tracked time when player position changes
+    // Atualiza o tempo rastreado quando a posição do player muda
     updateWatchedTime: function(currentTime) {
         var now = Date.now();
         
-        // Initialize last position if this is the first update
+        // Inicializa a última posição se esta for a primeira atualização
         if (this.lastPosition === null) {
             this.lastPosition = currentTime;
             this.lastUpdateTime = now;
             return;
         }
         
-        // Check if tab was inactive for too long (more than 2 seconds without updates)
+        // Verifica se a aba ficou inativa por muito tempo (mais de 2 segundos sem atualizações)
         var timeSinceLastUpdate = now - this.lastUpdateTime;
         if (timeSinceLastUpdate > 2000) {
-            bunnyVideoLog('Tab may have been inactive, skipping time tracking for this interval', null, 'debug');
+            bunnyVideoLog('A aba pode ter ficado inativa, pulando o rastreamento de tempo para este intervalo', null, 'debug');
             this.lastPosition = currentTime;
             this.lastUpdateTime = now;
             return;
         }
         
-        // If position moved forward by a small amount, count it as continuous watching
+        // Se a posição avançou um pouco, conta como visualização contínua
         var positionDelta = Math.abs(currentTime - this.lastPosition);
         if (positionDelta <= 2 * BunnyVideoDebugConfig.timeTrackingResolution) {
-            // Small forward movement (normal playback)
+            // Pequeno movimento para frente (reprodução normal)
             this.actualTimeWatched += positionDelta;
             this.lastPosition = currentTime;
             this.lastUpdateTime = now;
             
-            // Add to watched segments (merge with existing if possible)
+            // Adiciona aos segmentos assistidos (mescla com existente se possível)
             this.addWatchedSegment(currentTime - positionDelta, currentTime);
         } else {
-            // Larger jump - user probably skipped
-            bunnyVideoLog('Position jump detected: ' + this.formatTime(this.lastPosition) + 
+            // Salto maior - usuário provavelmente pulou
+            bunnyVideoLog('Salto de posição detectado: ' + this.formatTime(this.lastPosition) + 
                    ' → ' + this.formatTime(currentTime), null, 'debug');
             this.lastPosition = currentTime;
             this.lastUpdateTime = now;
         }
     },
     
-    // Add a watched segment and merge overlapping segments
+    // Adiciona um segmento assistido e mescla segmentos sobrepostos
     addWatchedSegment: function(start, end) {
         if (start >= end) return;
         
-        // Round to configured resolution
+        // Arredonda para a resolução configurada
         start = Math.floor(start / BunnyVideoDebugConfig.timeTrackingResolution) * BunnyVideoDebugConfig.timeTrackingResolution;
         end = Math.ceil(end / BunnyVideoDebugConfig.timeTrackingResolution) * BunnyVideoDebugConfig.timeTrackingResolution;
         
-        // Check if this segment overlaps with any existing segment
+        // Verifica se este segmento se sobrepõe a algum segmento existente
         var merged = false;
         for (var i = 0; i < this.watchedSegments.length; i++) {
             var segment = this.watchedSegments[i];
             
-            // Check for overlap
+            // Verifica sobreposição
             if (start <= segment[1] + BunnyVideoDebugConfig.timeTrackingResolution && 
                 end >= segment[0] - BunnyVideoDebugConfig.timeTrackingResolution) {
-                // Merge segments
+                // Mescla segmentos
                 segment[0] = Math.min(segment[0], start);
                 segment[1] = Math.max(segment[1], end);
                 merged = true;
@@ -314,50 +314,50 @@ window.BunnyVideoHandler = {
             }
         }
         
-        // If no overlap, add as new segment
+        // Se não houver sobreposição, adiciona como novo segmento
         if (!merged) {
             this.watchedSegments.push([start, end]);
         }
         
-        // Merge any segments that now overlap after the update
+        // Mescla quaisquer segmentos que agora se sobrepõem após a atualização
         this.mergeOverlappingSegments();
         
-        // Recalculate total time watched
+        // Recalcula o tempo total assistido
         this.recalculateTimeWatched();
     },
     
-    // Merge any overlapping segments
+    // Mescla quaisquer segmentos sobrepostos
     mergeOverlappingSegments: function() {
         if (this.watchedSegments.length <= 1) return;
         
-        // Sort segments by start time
+        // Ordena segmentos por tempo de início
         this.watchedSegments.sort(function(a, b) {
             return a[0] - b[0];
         });
         
-        // Merge overlapping segments
+        // Mescla segmentos sobrepostos
         var merged = [];
         var current = this.watchedSegments[0];
         
         for (var i = 1; i < this.watchedSegments.length; i++) {
             var next = this.watchedSegments[i];
             
-            // If current overlaps with next, merge them
+            // Se o atual se sobrepõe ao próximo, mescla-os
             if (current[1] + BunnyVideoDebugConfig.timeTrackingResolution >= next[0]) {
                 current[1] = Math.max(current[1], next[1]);
             } else {
-                // No overlap, add current to merged list and move to next
+                // Sem sobreposição, adiciona o atual à lista mesclada e move para o próximo
                 merged.push(current);
                 current = next;
             }
         }
         
-        // Add the last segment
+        // Adiciona o último segmento
         merged.push(current);
         this.watchedSegments = merged;
     },
     
-    // Recalculate total time watched from segments
+    // Recalcula o tempo total assistido de segmentos
     recalculateTimeWatched: function() {
         var total = 0;
         for (var i = 0; i < this.watchedSegments.length; i++) {
@@ -367,7 +367,7 @@ window.BunnyVideoHandler = {
         this.actualTimeWatched = total;
     },
     
-    // Poll for progress if timeupdate events aren't firing
+    // Polling para progresso se os eventos timeupdate não estiverem disparando
     startProgressPolling: function() {
         var self = this;
         
@@ -375,13 +375,13 @@ window.BunnyVideoHandler = {
             clearInterval(this.progressTimer);
         }
         
-        bunnyVideoLog('Starting progress polling as backup', null, 'info');
+        bunnyVideoLog('Iniciando polling de progresso como backup', null, 'info');
         
         this.progressTimer = setInterval(function() {
             if (!self.playerInstance || !self.playerReady || self.completionSent) return;
             
             try {
-                // Try to get current time and duration via API call
+                // Tenta obter o tempo atual e a duração via chamada de API
                 if (typeof self.playerInstance.api === 'function') {
                     var currentTime = 0;
                     var duration = 0;
@@ -390,7 +390,7 @@ window.BunnyVideoHandler = {
                         currentTime = self.playerInstance.api('currentTime') || 0;
                         duration = self.playerInstance.api('duration') || 0;
                     } catch (e) {
-                        // Some players might not support these methods
+                        // Alguns players podem não suportar esses métodos
                         return;
                     }
                     
@@ -399,40 +399,40 @@ window.BunnyVideoHandler = {
                         var previousMax = self.maxPercentReached;
                         self.maxPercentReached = Math.max(self.maxPercentReached, percentWatched);
                         
-                        // Log significant changes
+                        // Registra mudanças significativas
                         if (Math.floor(self.maxPercentReached) > Math.floor(previousMax)) {
-                            bunnyVideoLog('[POLL] Progress: ' + percentWatched.toFixed(1) + '%, max: ' + 
-                                    self.maxPercentReached.toFixed(1) + '%, target: ' + self.config.completionPercent + '%', 
+                            bunnyVideoLog('[POLL] Progresso: ' + percentWatched.toFixed(1) + '%, máx: ' + 
+                                    self.maxPercentReached.toFixed(1) + '%, alvo: ' + self.config.completionPercent + '%', 
                                     null, 'info');
                         }
                         
-                        // Check completion threshold
+                        // Verifica o limite de conclusão
                         if (self.maxPercentReached >= self.config.completionPercent) {
-                            bunnyVideoLog('[POLL] COMPLETION THRESHOLD REACHED!', null, 'success');
+                            bunnyVideoLog('[POLL] LIMITE DE CONCLUSÃO ATINGIDO!', null, 'success');
                             self.sendCompletion();
                         }
                     }
                 }
             } catch (e) {
-                bunnyVideoLog('Error in progress polling:', e, 'error');
+                bunnyVideoLog('Erro no polling de progresso:', e, 'error');
             }
-        }, 2000); // Check every 2 seconds
+        }, 2000); // Verifica a cada 2 segundos
     },
     
-    // Show a visual completion indicator
+    // Mostra um indicador visual de conclusão
     showCompletionIndicator: function() {
         try {
-            // Create a small indicator that fades out after a few seconds
+            // Cria um pequeno indicador que desaparece após alguns segundos
             var container = document.querySelector('[id^="bunnyvideo-player-"]');
             if (!container) {
-                bunnyVideoLog('Container not found for completion indicator', null, 'warn');
+                bunnyVideoLog('Container não encontrado para indicador de conclusão', null, 'warn');
                 return;
             }
             
-            // Only show if not already shown
+            // Mostra apenas se ainda não estiver sendo mostrado
             if (document.getElementById('bunny-completion-indicator')) return;
             
-            bunnyVideoLog('Showing completion indicator', null, 'info');
+            bunnyVideoLog('Mostrando indicador de conclusão', null, 'info');
             
             var indicator = document.createElement('div');
             indicator.id = 'bunny-completion-indicator';
@@ -454,10 +454,10 @@ window.BunnyVideoHandler = {
             container.style.position = 'relative';
             container.appendChild(indicator);
             
-            // Fade out after 5 seconds
+            // Desaparece após 5 segundos
             setTimeout(function() {
                 indicator.style.opacity = '0';
-                // Remove after fade out
+                // Remove após o desaparecimento
                 setTimeout(function() {
                     if (indicator.parentNode) {
                         indicator.parentNode.removeChild(indicator);
@@ -465,62 +465,62 @@ window.BunnyVideoHandler = {
                 }, 500);
             }, 5000);
         } catch (e) {
-            bunnyVideoLog('Error showing completion indicator:', e, 'error');
+            bunnyVideoLog('Erro ao mostrar indicador de conclusão:', e, 'error');
         }
     },
     
-    // Initialize player and set up event handlers
+    // Inicializa o player e configura os manipuladores de evento
     initializePlayer: function() {
         var self = this;
         
-        // Log all parameters to help with debugging
-        bunnyVideoLog('Initializing player with config:', this.config, 'info');
+        // Registra todos os parâmetros para ajudar na depuração
+        bunnyVideoLog('Inicializando player com config:', this.config, 'info');
         
         if (!this.config || !this.config.cmid) {
-            bunnyVideoLog('Invalid configuration', null, 'error');
+            bunnyVideoLog('Configuração inválida', null, 'error');
             return;
         }
         
-        // Try both potential container IDs
+        // Tenta ambos os IDs de container potenciais
         var containerIds = [
-            'bunnyvideo-player-' + this.config.bunnyvideoid,  // Try bunnyvideo ID first (from lib.php)
-            'bunnyvideo-player-' + this.config.cmid           // Try course module ID as fallback
+            'bunnyvideo-player-' + this.config.bunnyvideoid,  // Tenta o ID do bunnyvideo primeiro (de lib.php)
+            'bunnyvideo-player-' + this.config.cmid           // Tenta o ID do módulo do curso como fallback
         ];
         
-        bunnyVideoLog('Looking for containers with IDs:', containerIds, 'debug');
+        bunnyVideoLog('Procurando por containers com IDs:', containerIds, 'debug');
         
         var container = null;
         for (var i = 0; i < containerIds.length; i++) {
             var id = containerIds[i];
-            bunnyVideoLog('Looking for container with ID: ' + id, null, 'debug');
+            bunnyVideoLog('Procurando por container com ID: ' + id, null, 'debug');
             container = document.getElementById(id);
             if (container) {
-                bunnyVideoLog('Found container: ' + id, null, 'info');
+                bunnyVideoLog('Container encontrado: ' + id, null, 'info');
                 break;
             }
         }
         
         if (!container) {
-            bunnyVideoLog('Player container not found with any of these IDs: ' + containerIds.join(', '), null, 'error');
+            bunnyVideoLog('Container do player não encontrado com nenhum desses IDs: ' + containerIds.join(', '), null, 'error');
             return;
         }
         
-        // Find the iframe
+        // Encontra o iframe
         var iframe = container.querySelector('iframe');
         if (!iframe) {
-            bunnyVideoLog('No iframe found in container', null, 'error');
+            bunnyVideoLog('Nenhum iframe encontrado no container', null, 'error');
             return;
         }
         
-        bunnyVideoLog('Using iframe with id: ' + iframe.id, null, 'info');
+        bunnyVideoLog('Usando iframe com id: ' + iframe.id, null, 'info');
         
-        // Check for any variant of Player.js library
+        // Verifica qualquer variante da biblioteca Player.js
         this.ensurePlayerJsLibraryLoaded(function() {
             self.initializePlayerInstance(iframe, container);
         });
     },
     
-    // Make sure the Player.js library is loaded and ready to use
+    // Garante que a biblioteca Player.js seja carregada e esteja pronta para uso
     ensurePlayerJsLibraryLoaded: function(callback) {
         var attempts = 0;
         var maxAttempts = 10;
@@ -529,7 +529,7 @@ window.BunnyVideoHandler = {
         function checkForPlayerJs() {
             attempts++;
             
-            // Check for all potential global variables
+            // Verifica todas as variáveis globais potenciais
             var playerJsExists = (
                 typeof playerjs !== 'undefined' || 
                 typeof PlayerJS !== 'undefined' || 
@@ -538,48 +538,48 @@ window.BunnyVideoHandler = {
             );
             
             if (playerJsExists) {
-                bunnyVideoLog('Player.js library found on attempt ' + attempts, null, 'success');
+                bunnyVideoLog('Biblioteca Player.js encontrada na tentativa ' + attempts, null, 'success');
                 callback();
                 return;
             }
             
             if (attempts >= maxAttempts) {
-                bunnyVideoLog('Player.js library not found after ' + maxAttempts + ' attempts, using fallback approach', null, 'warn');
-                callback(); // Continue anyway, we'll use fallback in initialization
+                bunnyVideoLog('Biblioteca Player.js não encontrada após ' + maxAttempts + ' tentativas, usando abordagem de fallback', null, 'warn');
+                callback(); // Continua mesmo assim, usaremos fallback na inicialização
                 return;
             }
             
-            bunnyVideoLog('Waiting for Player.js library (attempt ' + attempts + '/' + maxAttempts + ')', null, 'debug');
+            bunnyVideoLog('Aguardando a biblioteca Player.js (tentativa ' + attempts + '/' + maxAttempts + ')', null, 'debug');
             setTimeout(checkForPlayerJs, 200);
         }
         
         checkForPlayerJs();
     },
     
-    // Initialize the player instance once we've verified library loading
+    // Inicializa a instância do player assim que verificamos o carregamento da biblioteca
     initializePlayerInstance: function(iframe, container) {
-        // From examining the Bunny-specific library, we can see the global object is 'playerjs'
-        // Try all known variants
+        // Ao examinar a biblioteca específica do Bunny, podemos ver que o objeto global é 'playerjs'
+        // Tenta todas as variantes conhecidas
         if (typeof playerjs !== 'undefined') {
-            bunnyVideoLog('Found Bunny-specific playerjs library', null, 'success');
+            bunnyVideoLog('Biblioteca playerjs específica do Bunny encontrada', null, 'success');
             
-            // Check which constructor pattern is available
+            // Verifica qual padrão de construtor está disponível
             if (typeof playerjs.Player === 'function') {
-                bunnyVideoLog('Using playerjs.Player constructor', null, 'success');
+                bunnyVideoLog('Usando construtor playerjs.Player', null, 'success');
                 this.playerInstance = new playerjs.Player(iframe);
             } else if (typeof playerjs === 'function') {
-                bunnyVideoLog('Using playerjs constructor directly', null, 'success');
+                bunnyVideoLog('Usando construtor playerjs diretamente', null, 'success');
                 this.playerInstance = new playerjs(iframe);
             } else {
-                bunnyVideoLog('Unknown playerjs library structure', playerjs, 'warn');
+                bunnyVideoLog('Estrutura de biblioteca playerjs desconhecida', playerjs, 'warn');
                 this.setupPostMessagePlayer(iframe);
                 return;
             }
         } else if (typeof PlayerJS !== 'undefined') {
-            bunnyVideoLog('Found PlayerJS constructor', null, 'success');
+            bunnyVideoLog('Construtor PlayerJS encontrado', null, 'success');
             this.playerInstance = new PlayerJS(iframe);
         } else if (typeof window.playerjs !== 'undefined') {
-            bunnyVideoLog('Found window.playerjs', null, 'success');
+            bunnyVideoLog('window.playerjs encontrado', null, 'success');
             
             if (typeof window.playerjs.Player === 'function') {
                 this.playerInstance = new window.playerjs.Player(iframe);
@@ -587,87 +587,87 @@ window.BunnyVideoHandler = {
                 this.playerInstance = new window.playerjs(iframe);
             }
         } else if (typeof window.PlayerJS !== 'undefined') {
-            bunnyVideoLog('Found window.PlayerJS constructor', null, 'success');
+            bunnyVideoLog('Construtor window.PlayerJS encontrado', null, 'success');
             this.playerInstance = new window.PlayerJS(iframe);
         } else {
-            bunnyVideoLog('Player.js library not found! Looking for alternatives...', null, 'warn');
+            bunnyVideoLog('Biblioteca Player.js não encontrada! Procurando alternativas...', null, 'warn');
             
-            // Log all window properties containing "player" for debugging
+            // Registra todas as propriedades da janela contendo "player" para depuração
             var playerVars = Object.keys(window).filter(function(key) {
                 return key.toLowerCase().indexOf('player') !== -1; 
             });
             
-            bunnyVideoLog('Available global variables containing "player":', playerVars, 'debug');
+            bunnyVideoLog('Variáveis globais disponíveis contendo "player":', playerVars, 'debug');
             
-            // Try a different approach with the latest CDN method
-            bunnyVideoLog('Attempting to use direct iframe control with postMessage API', null, 'info');
+            // Tenta uma abordagem diferente com o método CDN mais recente
+            bunnyVideoLog('Tentando usar controle direto do iframe com a API postMessage', null, 'info');
             this.setupPostMessagePlayer(iframe);
             return;
         }
         
         if (!this.playerInstance) {
-            bunnyVideoLog('Failed to create player instance, using fallback', null, 'error');
+            bunnyVideoLog('Falha ao criar instância do player, usando fallback', null, 'error');
             this.setupPostMessagePlayer(iframe);
             return;
         }
         
-        bunnyVideoLog('Player instance created successfully, setting up event listeners', null, 'success');
+        bunnyVideoLog('Instância do player criada com sucesso, configurando listeners de evento', null, 'success');
         this.setupPlayerEvents();
         
-        // Add debug button for testing
+        // Adiciona botão de depuração para teste
         this.addDebugButton(container);
     },
     
-    // Set up player events once we have a valid player instance
+    // Configura eventos do player assim que tivermos uma instância de player válida
     setupPlayerEvents: function() {
         var self = this;
         
-        // When the player is ready
+        // Quando o player estiver pronto
         this.playerInstance.on('ready', function() {
-            bunnyVideoLog('Player ready event received', null, 'success');
+            bunnyVideoLog('Evento ready do player recebido', null, 'success');
             self.playerReady = true;
             
-            // Setup various event listeners
+            // Configura vários listeners de evento
             self.playerInstance.on('timeupdate', function(data) {
                 self.onTimeUpdate(data);
             });
             
             self.playerInstance.on('play', function() {
-                bunnyVideoLog('Player play event', null, 'debug');
+                bunnyVideoLog('Evento play do player', null, 'debug');
             });
             
             self.playerInstance.on('pause', function() {
-                bunnyVideoLog('Player pause event', null, 'debug');
+                bunnyVideoLog('Evento pause do player', null, 'debug');
             });
             
             self.playerInstance.on('ended', function() {
-                bunnyVideoLog('Player ended event - setting 100% watched', null, 'success');
+                bunnyVideoLog('Evento ended do player - definindo 100% assistido', null, 'success');
                 self.maxPercentReached = 100;
                 if (self.config.completionPercent > 0) {
                     self.sendCompletion();
                 }
             });
             
-            // Start polling as a backup
+            // Inicia polling como backup
             self.startProgressPolling();
         });
         
         this.playerInstance.on('error', function(error) {
-            bunnyVideoLog('Player error:', error, 'error');
+            bunnyVideoLog('Erro do player:', error, 'error');
         });
     },
     
-    // Add a debug button for manually triggering completion (only in dev/test)
+    // Adiciona um botão de depuração para disparar manualmente a conclusão (apenas em dev/teste)
     addDebugButton: function(container) {
         try {
-            // Only add debug button if debug UI is enabled
+            // Adiciona botão de depuração apenas se a UI de depuração estiver habilitada
             if (!BunnyVideoDebugConfig.showDebugUI) {
                 return;
             }
             
             var self = this;
             var debugButton = document.createElement('button');
-            debugButton.textContent = 'DEBUG: Mark Complete';
+            debugButton.textContent = 'DEBUG: Marcar Concluído';
             debugButton.style.cssText = 'position:absolute; bottom:10px; right:10px; background:#f44336; color:white; border:none; padding:5px 10px; cursor:pointer; z-index:1000; border-radius:4px; font-size:12px;';
             debugButton.onclick = function() {
                 self.debugTriggerCompletion();
@@ -676,87 +676,87 @@ window.BunnyVideoHandler = {
             container.style.position = 'relative';
             container.appendChild(debugButton);
         } catch (e) {
-            // Silently fail - just a debug tool
+            // Falha silenciosamente - apenas uma ferramenta de depuração
         }
     },
     
-    // Setup player using the detected library
+    // Configura o player usando a biblioteca detectada
     setupPlayerWithLibrary: function(libraryType, iframe) {
         var self = this;
         try {
-            bunnyVideoLog('Setting up player with ' + libraryType, null, 'info');
+            bunnyVideoLog('Configurando player com ' + libraryType, null, 'info');
             
-            // Try to create a player instance with the detected library
+            // Tenta criar uma instância de player com a biblioteca detectada
             if (libraryType === 'PlayerJS') {
-                bunnyVideoLog('Creating a new PlayerJS instance', null, 'debug');
+                bunnyVideoLog('Criando uma nova instância PlayerJS', null, 'debug');
                 this.playerInstance = new PlayerJS(iframe);
             } else if (libraryType === 'playerjs') {
-                bunnyVideoLog('Creating a new playerjs.Player instance', null, 'debug');
+                bunnyVideoLog('Criando um novo construtor playerjs.Player', null, 'debug');
                 this.playerInstance = new playerjs.Player(iframe);
             } else if (libraryType === 'window.PlayerJS') {
-                bunnyVideoLog('Creating a new window.PlayerJS instance', null, 'debug');
+                bunnyVideoLog('Criando uma nova instância window.PlayerJS', null, 'debug');
                 this.playerInstance = new window.PlayerJS(iframe);
             } else if (libraryType === 'window.playerjs') {
-                bunnyVideoLog('Creating a new window.playerjs.Player instance', null, 'debug');
+                bunnyVideoLog('Criando uma nova instância window.playerjs.Player', null, 'debug');
                 this.playerInstance = new window.playerjs.Player(iframe);
             }
             
             if (!this.playerInstance) {
-                bunnyVideoLog('Failed to create player instance', null, 'error');
+                bunnyVideoLog('Falha ao criar instância do player', null, 'error');
                 this.setupPostMessagePlayer(iframe);
                 return;
             }
             
-            bunnyVideoLog('Player instance created successfully, setting up event listeners', null, 'success');
+            bunnyVideoLog('Instância do player criada com sucesso, configurando listeners de evento', null, 'success');
             
-            // When the player is ready
+            // Quando o player estiver pronto
             this.playerInstance.on('ready', function() {
-                bunnyVideoLog('Player ready event received', null, 'success');
+                bunnyVideoLog('Evento ready do player recebido', null, 'success');
                 self.playerReady = true;
                 
-                // Setup various event listeners
+                // Configura vários listeners de evento
                 self.playerInstance.on('timeupdate', function(data) {
                     self.onTimeUpdate(data);
                 });
                 
                 self.playerInstance.on('play', function() {
-                    bunnyVideoLog('Player play event', null, 'debug');
+                    bunnyVideoLog('Evento play do player', null, 'debug');
                 });
                 
                 self.playerInstance.on('pause', function() {
-                    bunnyVideoLog('Player pause event', null, 'debug');
+                    bunnyVideoLog('Evento pause do player', null, 'debug');
                 });
                 
                 self.playerInstance.on('ended', function() {
-                    bunnyVideoLog('Player ended event - setting 100% watched', null, 'success');
+                    bunnyVideoLog('Evento ended do player - definindo 100% assistido', null, 'success');
                     self.maxPercentReached = 100;
                     if (self.config.completionPercent > 0) {
                         self.sendCompletion();
                     }
                 });
                 
-                // Start polling as a backup
+                // Inicia polling como backup
                 self.startProgressPolling();
             });
             
             this.playerInstance.on('error', function(error) {
-                bunnyVideoLog('Player error:', error, 'error');
+                bunnyVideoLog('Erro do player:', error, 'error');
             });
             
         } catch (e) {
-            bunnyVideoLog('Error setting up player:', e, 'error');
+            bunnyVideoLog('Erro ao configurar player:', e, 'error');
             
-            // Try fallback
+            // Tenta fallback
             this.setupPostMessagePlayer(iframe);
         }
     },
     
-    // Fallback to using postMessage API directly with iframe
+    // Fallback para usar a API postMessage diretamente com iframe
     setupPostMessagePlayer: function(iframe) {
         var self = this;
-        bunnyVideoLog('Using fallback postMessage approach', null, 'info');
+        bunnyVideoLog('Usando abordagem de fallback postMessage', null, 'info');
         
-        // Create a simple custom player wrapper
+        // Cria um wrapper de player personalizado simples
         var customPlayer = {
             ready: false,
             
@@ -790,7 +790,7 @@ window.BunnyVideoHandler = {
                             callback(data.value);
                         }
                     } catch (err) {
-                        // Not a valid JSON message or not from our player
+                        // Mensagem JSON inválida ou não do nosso player
                     }
                 });
                 
@@ -806,9 +806,9 @@ window.BunnyVideoHandler = {
         this.playerInstance = customPlayer;
         self.playerReady = false;
         
-        // Set up event handlers similar to standard Player.js
+        // Configura manipuladores de evento semelhantes ao Player.js padrão
         customPlayer.on('ready', function() {
-            bunnyVideoLog('Custom player ready event received', null, 'success');
+            bunnyVideoLog('Evento ready do player personalizado recebido', null, 'success');
             self.playerReady = true;
             
             // Listen for timeupdate events
@@ -818,42 +818,42 @@ window.BunnyVideoHandler = {
             
             // Other events
             customPlayer.on('play', function() {
-                bunnyVideoLog('Custom player play event', null, 'debug');
+                bunnyVideoLog('Evento play do player personalizado', null, 'debug');
             });
             
             customPlayer.on('pause', function() {
-                bunnyVideoLog('Custom player pause event', null, 'debug');
+                bunnyVideoLog('Evento pause do player personalizado', null, 'debug');
             });
             
             customPlayer.on('ended', function() {
-                bunnyVideoLog('Custom player ended event - setting 100% watched', null, 'success');
+                bunnyVideoLog('Evento ended do player personalizado - definindo 100% assistido', null, 'success');
                 self.maxPercentReached = 100;
                 if (self.config.completionPercent > 0) {
                     self.sendCompletion();
                 }
             });
             
-            // Start polling as a backup
+            // Inicia polling como backup
             self.startProgressPolling();
         });
         
         customPlayer.on('error', function(error) {
-            bunnyVideoLog('Custom player error:', error, 'error');
+            bunnyVideoLog('Erro do player personalizado:', error, 'error');
         });
     },
     
-    // Main initialization function called from PHP
+    // Função principal de inicialização chamada do PHP
     init: function(cfg) {
         this.config = cfg;
-        bunnyVideoLog('Initializing BunnyVideoHandler with config:', cfg, 'info');
+        bunnyVideoLog('Inicializando BunnyVideoHandler com config:', cfg, 'info');
         
         if (!this.config || !this.config.cmid) {
-            bunnyVideoLog('Invalid configuration', null, 'error');
+            bunnyVideoLog('Configuração inválida', null, 'error');
             return;
         }
         
         var self = this;
-        // Initialize player after DOM is ready
+        // Inicializa o player após o DOM estar pronto
         if (document.readyState === 'complete' || document.readyState === 'interactive') {
             setTimeout(function() { self.initializePlayer(); }, 100);
         } else {
@@ -864,8 +864,8 @@ window.BunnyVideoHandler = {
     }
 };
 
-// Also define this for backward compatibility
+// Também define isso para compatibilidade com versões anteriores
 window.BunnyVideoInit = function(config) {
-    bunnyVideoLog('BunnyVideoInit called, delegating to BunnyVideoHandler', null, 'info');
+    bunnyVideoLog('BunnyVideoInit chamado, delegando para BunnyVideoHandler', null, 'info');
     window.BunnyVideoHandler.init(config);
 };
