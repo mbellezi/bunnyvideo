@@ -231,8 +231,12 @@ window.BunnyVideoHandler = {
                        ' (' + percentOfActualTimeWatched.toFixed(1) + '% de ' + this.formatTime(duration) + ')', 
                        null, BunnyVideoDebugConfig.debugLevel >= 3 ? 'debug' : 'info');
                 
+                // Arredonda a porcentagem calculada APENAS se a meta for 100% para evitar problemas de precisão
+                var comparisonPercent = (this.config.completionPercent === 100) ? Math.round(percentOfActualTimeWatched) : percentOfActualTimeWatched;
+
                 // Usa APENAS o tempo real assistido para a conclusão, não maxPercentReached
-                if (percentOfActualTimeWatched >= this.config.completionPercent) {
+                // Compara usando o valor potencialmente arredondado
+                if (comparisonPercent >= this.config.completionPercent) {
                     bunnyVideoLog('LIMITE DE CONCLUSÃO ATINGIDO com base no tempo real assistido!', null, 'success');
                     this.sendCompletion();
                 }
@@ -811,12 +815,11 @@ window.BunnyVideoHandler = {
             bunnyVideoLog('Evento ready do player personalizado recebido', null, 'success');
             self.playerReady = true;
             
-            // Listen for timeupdate events
+            // Configura vários listeners de evento
             customPlayer.on('timeupdate', function(data) {
                 self.onTimeUpdate(data);
             });
             
-            // Other events
             customPlayer.on('play', function() {
                 bunnyVideoLog('Evento play do player personalizado', null, 'debug');
             });
