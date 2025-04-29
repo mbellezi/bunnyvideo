@@ -641,11 +641,11 @@ window.BunnyVideoHandler = {
             });
             
             self.playerInstance.on('ended', function() {
-                bunnyVideoLog('Evento ended do player - definindo 100% assistido', null, 'success');
-                self.maxPercentReached = 100;
-                if (self.config.completionPercent > 0) {
-                    self.sendCompletion();
-                }
+                // bunnyVideoLog('Evento ended do player', null, 'success');
+                // self.maxPercentReached = 100;
+                // if (self.config.completionPercent > 0) {
+                //     self.sendCompletion();
+                // }
             });
             
             // Inicia polling como backup
