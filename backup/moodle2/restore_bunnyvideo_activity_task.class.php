@@ -15,6 +15,14 @@ class restore_bunnyvideo_activity_task extends restore_activity_task {
          return $content; // Marcador de posição
     }
 
+    public static function define_decode_contents() {
+        return array();
+    }
+
+    public static function define_decode_rules() {
+        return array();
+    }    
+
     static public function decode_content_links_caller($function) {
         return self::decode_content_links($function);
     }

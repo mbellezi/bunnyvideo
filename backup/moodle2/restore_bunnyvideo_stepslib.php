@@ -19,7 +19,6 @@ class restore_bunnyvideo_activity_structure_step extends restore_activity_struct
 
         // Ajusta o formato da introdução e os links, se necessário, usando o contexto do plano de restauração
         $data->introformat = $this->apply_date_offset($data->introformat);
-        $data->intro = $this->apply_content_links($data->intro);
 
         $data->timecreated = $this->apply_date_offset($data->timecreated);
         $data->timemodified = $this->apply_date_offset($data->timemodified);
