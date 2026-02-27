@@ -42,39 +42,31 @@ function bunnyvideo_view($bunnyvideo, $cm, $context, $options = null)
         debugging('Erro ao criar evento: ' . $e->getMessage(), DEBUG_DEVELOPER);
     }
 
-    // Impedir que o Moodle marque automaticamente a atividade como concluída por visualização
+    // ABORDAGEM RADICAL: Impedir COMPLETAMENTE qualquer tentativa de marcar a visualização
+    // NÃO USAR $completion->set_module_viewed($cm) em NENHUMA circunstância
     $completion = new completion_info($course);
 
-    // Verificar se a atividade foi marcada como concluída indevidamente
-    // (por exemplo, por auto-completação do Moodle ao visualizar a página)
+    // MODIFICAÇÃO CRÍTICA: Zerar completionstate se for baseado em visualização
+    // Verificar se a atividade acabou de ser marcada como concluída no banco de dados
+    // Se foi marcada como concluída por visualização, desfazer essa marcação
     $completiondata = $completion->get_data($cm, false, $USER->id);
     if (
         $completiondata->completionstate == COMPLETION_COMPLETE &&
-        $cm->completion == COMPLETION_TRACKING_AUTOMATIC
+        $cm->completion == COMPLETION_TRACKING_AUTOMATIC &&
+        $cm->completionview == 1 &&
+        empty($bunnyvideo->completionpercent)
     ) {
 
-        // Verifica se existe um registro REAL de conclusão feito pelo nosso AJAX
-        $real_completion = $DB->get_record('course_modules_completion', array(
+        // Apagar o registro de conclusão por visualização 
+        // diretamente, sem usar APIs que podem reativar a conclusão
+        $DB->delete_records('course_modules_completion', array(
             'coursemoduleid' => $cm->id,
             'userid' => $USER->id
         ));
 
-        // Se o estado é COMPLETE mas NÃO foi definido pelo nosso sistema AJAX,
-        // então é uma auto-completação indevida - desfazer
-        $was_set_by_our_ajax = $real_completion &&
-            $real_completion->completionstate == COMPLETION_COMPLETE;
-
-        if (!$was_set_by_our_ajax) {
-            // Apagar o registro de conclusão indevido
-            $DB->delete_records('course_modules_completion', array(
-                'coursemoduleid' => $cm->id,
-                'userid' => $USER->id
-            ));
-
-            // Recarregar os dados de conclusão para garantir que estejam limpos
-            $completiondata = $completion->get_data($cm, true, $USER->id);
-            debugging('BunnyVideo: Conclusão indevida removida - atividade não foi assistida');
-        }
+        // Recarregar os dados de conclusão para garantir que estejam limpos
+        $completiondata = $completion->get_data($cm, true, $USER->id);
+        debugging('BunnyVideo: Impedir conclusão automática por visualização');
     }
 
     // Obter o status de conclusão atual para o usuário após a possível correção acima
@@ -217,15 +209,17 @@ function bunnyvideo_add_instance($bunnyvideo, $mform)
     $bunnyvideo->timecreated = time();
     $bunnyvideo->timemodified = $bunnyvideo->timecreated;
 
+    // completionpercent agora é tratado corretamente por data_postprocessing em mod_form.php
+    // Não é mais necessário verificar/desdefinir 'completionwhenpercentreached' aqui.
+
     $bunnyvideo->id = $DB->insert_record('bunnyvideo', $bunnyvideo);
 
-    // IMPORTANTE: Forçar completionview=0 no course_modules para impedir que o Moodle
-    // marque a atividade como concluída apenas por visualização.
-    // A conclusão deve ser controlada EXCLUSIVAMENTE pelo nosso AJAX (porcentagem assistida).
-    $cmid = $bunnyvideo->coursemodule;
-    if ($cmid) {
-        $DB->set_field('course_modules', 'completionview', 0, array('id' => $cmid));
-    }
+    // Processa as configurações de conclusão salvas por standard_completion_elements
+    $cmid = $bunnyvideo->coursemodule; // Passado em $bunnyvideo por moodleform_mod
+
+    // NOTA: Removida a chamada para completion->update_completion_rules que não está disponível
+    // O Moodle tratará automaticamente as configurações de conclusão padrão
+    // O campo completionpercent é armazenado em nossa tabela bunnyvideo e usado pelo nosso JS
 
     return $bunnyvideo->id;
 }
@@ -242,28 +236,18 @@ function bunnyvideo_update_instance($bunnyvideo, $mform)
 
     $bunnyvideo->timemodified = time();
     $bunnyvideo->id = $bunnyvideo->instance; // Passado em $bunnyvideo por moodleform_mod
-    $cmid = $bunnyvideo->coursemodule; // Passado em $bunnyvideo por moodleform_mod
 
-    // Busca o valor anterior de completionpercent para comparação
-    $oldbunnyvideo = $DB->get_record('bunnyvideo', array('id' => $bunnyvideo->id), 'completionpercent');
-    $oldpercent = $oldbunnyvideo ? (int) $oldbunnyvideo->completionpercent : 0;
-    $newpercent = isset($bunnyvideo->completionpercent) ? (int) $bunnyvideo->completionpercent : 0;
+    // completionpercent agora é tratado corretamente por data_postprocessing em mod_form.php
+    // Não é mais necessário verificar/desdefinir 'completionwhenpercentreached' aqui.
 
     $result = $DB->update_record('bunnyvideo', $bunnyvideo);
 
-    // IMPORTANTE: Forçar completionview=0 no course_modules para impedir que o Moodle
-    // marque a atividade como concluída apenas por visualização.
-    if ($cmid) {
-        $DB->set_field('course_modules', 'completionview', 0, array('id' => $cmid));
-    }
+    // Processa as configurações de conclusão salvas por standard_completion_elements
+    $cmid = $bunnyvideo->coursemodule; // Passado em $bunnyvideo por moodleform_mod
 
-    // Se a porcentagem mudou, resetar todos os registros de conclusão desta atividade
-    // para que o Moodle reavalie corretamente (todos começam como INCOMPLETE)
-    if ($oldpercent != $newpercent && $cmid) {
-        $DB->delete_records('course_modules_completion', array('coursemoduleid' => $cmid));
-        debugging('BunnyVideo: Porcentagem alterada de ' . $oldpercent . '% para ' . $newpercent .
-            '% - registros de conclusão resetados para cmid: ' . $cmid, DEBUG_DEVELOPER);
-    }
+    // NOTA: Removida a chamada para completion->update_completion_rules que não está disponível 
+    // O Moodle tratará automaticamente as configurações de conclusão padrão
+    // O campo completionpercent é armazenado em nossa tabela bunnyvideo e usado pelo nosso JS
 
     return $result;
 }
@@ -412,23 +396,9 @@ function bunnyvideo_get_completion_state($course, $cm, $userid, $type)
             $bunnyvideo->completionpercent > 0
         ) {
 
-            // Verifica se existe um registro REAL de conclusão na tabela course_modules_completion
-            // Isso evita que atividades novas apareçam como completadas para alunos existentes
-            $existing = $DB->get_record('course_modules_completion', array(
-                'coursemoduleid' => $cm->id,
-                'userid' => $userid
-            ));
-
-            if ($existing && $existing->completionstate == COMPLETION_COMPLETE) {
-                // Existe um registro real de conclusão (definido pelo AJAX do player)
-                return $current;
-            }
-
-            // Sem registro de conclusão real - retorna explicitamente INCOMPLETE
-            $result = new stdClass();
-            $result->completionstate = COMPLETION_INCOMPLETE;
-            $result->timemodified = 0;
-            return $result;
+            // Para uma solicitação de tipo nulo (verificação do estado principal de conclusão), retorna o estado atual
+            // Isso garante que o relatório reflita o estado real marcado pelo nosso JavaScript
+            return $current;
         }
 
         // CORREÇÃO ADICIONAL: Força o estado incompleto se a única razão para a conclusão
@@ -490,10 +460,46 @@ function bunnyvideo_cm_completion_settings_changed($data, $cm, $completion, $ena
     return $reset;
 }
 
-// REMOVIDA: bunnyvideo_update_completion_state_settings()
-// Essa função chamava mark_completion_state_updated() que não é uma função padrão do Moodle.
-// A lógica de reset de conclusão ao alterar configurações agora é tratada diretamente
-// em bunnyvideo_update_instance().
+/**
+ * Função de callback quando o formulário de configurações de conclusão é processado.
+ * Usado para redefinir o status de conclusão se as configurações mudarem significativamente.
+ *
+ * @param stdClass $cm O objeto do módulo do curso (novo estado)
+ * @param stdClass $oldcm O objeto do módulo do curso anterior (estado antigo)
+ * @param stdClass $data Dados do formulário enviados (novas configurações do bunnyvideo)
+ * @param stdClass $olddata Os dados da instância bunnyvideo anterior (buscados)
+ * @return bool Sempre true
+ */
+function bunnyvideo_update_completion_state_settings($cm, $oldcm, $data, $olddata)
+{
+    global $DB;
+
+    // Busca o registro da instância bunnyvideo antiga se necessário para comparação
+    $oldbunnyvideo = $DB->get_record('bunnyvideo', ['id' => $oldcm->instance], 'id, completionpercent');
+
+    // Verifica se o método principal de rastreamento de conclusão mudou
+    $corecompletionchanged = $cm->completion != $oldcm->completion ||
+        $cm->completionview != $oldcm->completionview;
+
+    // Verifica se nossa regra de porcentagem personalizada mudou
+    // Nota: $data contém os dados do formulário enviados, $oldbunnyvideo o valor anterior do bd.
+    $percentrulechanged = false;
+    $newpercent = isset($data->completionpercent) ? (int) $data->completionpercent : 0;
+    $oldpercent = $oldbunnyvideo ? (int) $oldbunnyvideo->completionpercent : 0;
+    if ($newpercent != $oldpercent) {
+        $percentrulechanged = true;
+    }
+
+    // Se alguma configuração de conclusão relevante foi modificada, dispara uma redefinição.
+    if ($corecompletionchanged || $percentrulechanged) {
+        // Marca que as configurações que afetam a conclusão foram atualizadas.
+        // O núcleo do Moodle lidará com a redefinição do status de conclusão para os usuários com base nisso.
+        mark_completion_state_updated($cm->id, time());
+        debugging("BunnyVideo: Completion settings changed, triggering state update for cmid: {$cm->id}", DEBUG_DEVELOPER);
+    }
+
+    return true; // Deve retornar true
+}
 
 /**
  * Retorna a descrição da regra de conclusão ativa para esta instância do módulo.
