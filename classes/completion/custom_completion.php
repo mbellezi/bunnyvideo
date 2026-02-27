@@ -41,27 +41,27 @@ class custom_completion extends activity_custom_completion
         $this->validate_rule($rule);
 
         // Get the bunnyvideo instance to check if completionpercent is configured.
-        $bunnyvideo = $DB->get_record('bunnyvideo', ['id' => $this->cm->instance], 'completionpercent', MUST_EXIST);
+        $bunnyvideo = $DB->get_record('bunnyvideo', ['id' => $this->cm->instance], 'id, completionpercent', MUST_EXIST);
 
         // If completionpercent is not set or is 0, the rule is effectively satisfied.
         if (empty($bunnyvideo->completionpercent) || $bunnyvideo->completionpercent <= 0) {
             return COMPLETION_COMPLETE;
         }
 
-        // Check if the completion has been explicitly set by our AJAX handler.
-        // We look at the course_modules_completion table directly. If there's a record
-        // with completionstate = COMPLETION_COMPLETE, it means the JS handler set it
-        // after the student watched enough of the video.
-        $completionrecord = $DB->get_record('course_modules_completion', [
-            'coursemoduleid' => $this->cm->id,
+        // Check if the student has met the completion criteria.
+        // We use our own bunnyvideo_progress table (NOT course_modules_completion)
+        // to avoid circular dependency: Moodle writes to course_modules_completion
+        // based on the result of this method, so we can't check that table here.
+        $progress = $DB->get_record('bunnyvideo_progress', [
+            'bunnyvideoid' => $bunnyvideo->id,
             'userid' => $this->userid,
         ]);
 
-        if ($completionrecord && $completionrecord->completionstate == COMPLETION_COMPLETE) {
+        if ($progress && $progress->completionmet == 1) {
             return COMPLETION_COMPLETE;
         }
 
-        // No completion record or not marked as complete — student hasn't watched enough.
+        // No progress record or not met — student hasn't watched enough.
         return COMPLETION_INCOMPLETE;
     }
 

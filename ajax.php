@@ -61,18 +61,42 @@ require_login($course, false, $cm);
 if ($action === 'mark_complete' || $action === 'markcomplete') {
     // Verifica se a conclusão está habilitada para este curso e módulo
     $completion = new completion_info($course);
-    
+
     if (!$completion->is_enabled($cm)) {
         $response['message'] = get_string('completionnotenabled', 'completion');
     } else {
         // Salva o estado atual para verificar se já está concluído
         $current = $completion->get_data($cm, false, $USER->id);
         $was_complete = $current->completionstate == COMPLETION_COMPLETE;
-        
-        // Marca o módulo como concluído
+
+        // Registra o progresso na tabela bunnyvideo_progress ANTES de chamar update_state.
+        // Isso é necessário porque update_state() chama get_state() da classe custom_completion,
+        // que verifica bunnyvideo_progress para determinar se o aluno completou.
+        $progressrecord = $DB->get_record('bunnyvideo_progress', [
+            'bunnyvideoid' => $bunnyvideo->id,
+            'userid' => $USER->id,
+        ]);
+
+        if ($progressrecord) {
+            if ($progressrecord->completionmet != 1) {
+                $progressrecord->completionmet = 1;
+                $progressrecord->timemodified = time();
+                $DB->update_record('bunnyvideo_progress', $progressrecord);
+            }
+        } else {
+            $progress = new stdClass();
+            $progress->bunnyvideoid = $bunnyvideo->id;
+            $progress->userid = $USER->id;
+            $progress->completionmet = 1;
+            $progress->timemodified = time();
+            $DB->insert_record('bunnyvideo_progress', $progress);
+        }
+
+        // Agora chama update_state() — o Moodle chamará get_state() que encontrará
+        // o registro em bunnyvideo_progress e retornará COMPLETION_COMPLETE.
         $completion->update_state($cm, COMPLETION_COMPLETE);
         $response['success'] = true;
-        
+
         // Mensagem diferente com base em se já estava concluído
         if ($was_complete) {
             $response['message'] = get_string('completion-y', 'core_completion');
@@ -80,31 +104,8 @@ if ($action === 'mark_complete' || $action === 'markcomplete') {
         } else {
             $response['message'] = get_string('completed', 'completion');
             $response['already_complete'] = false;
-            
-            // Estamos pulando o registro de eventos devido a problemas com o observador de emblemas do Moodle
-            // Isso não afeta a funcionalidade de conclusão
             $response['event_logged'] = false;
             $response['note'] = 'Event logging skipped to avoid badge observer errors';
-            
-            /*
-            // Registra o evento de conclusão - DESABILITADO DEVIDO A PROBLEMAS COM O OBSERVADOR DE EMBLEMAS
-            try {
-                $event = \core\event\course_module_completion_updated::create(array(
-                    'objectid' => $cm->id,
-                    'context' => $context,
-                    'relateduserid' => $USER->id,
-                    'other' => array(
-                        'completionstate' => COMPLETION_COMPLETE
-                    )
-                ));
-                $event->trigger();
-                $response['event_logged'] = true;
-            } catch (Exception $e) {
-                // Não permite que a falha no registro do evento impeça a marcação da conclusão
-                $response['event_error'] = $e->getMessage();
-                $response['event_logged'] = false;
-            }
-            */
         }
     }
 } else {
