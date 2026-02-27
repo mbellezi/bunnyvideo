@@ -84,6 +84,19 @@ class mod_bunnyvideo_mod_form extends moodleform_mod
         // Remove o campo antigo que era usado pela checkbox, caso ainda exista nos dados crus do POST
         unset($data->completionwhenpercentreached);
 
+        // FATAL BUG FIX: O Moodle 4.x processa as regras como checkboxes no form. Como usamos
+        // texto, ele "esquece" de adicionar a nossa regra à lista oficial que salva no banco de dados.
+        // Isso forçava o sistema a achar que a regra estava desativada e completava a atividade para todos.
+        // Aqui forçamos a adição:
+        if ($data->completionpercent > 0) {
+            if (!isset($data->customcompletionrules) || !is_array($data->customcompletionrules)) {
+                $data->customcompletionrules = [];
+            }
+            if (!in_array('completionpercent', $data->customcompletionrules)) {
+                $data->customcompletionrules[] = 'completionpercent';
+            }
+        }
+
         return $data;
     }
 
@@ -121,9 +134,18 @@ class mod_bunnyvideo_mod_form extends moodleform_mod
      */
     public function completion_rule_enabled($data)
     {
-        // A regra está habilitada se o campo de porcentagem tiver um valor maior que 0
-        // O Moodle parece passar dados como um array aqui, apesar de ser objeto em outros lugares
-        return (!empty($data['completionpercent']) && $data['completionpercent'] > 0);
+        // O Moodle pode passar os dados como array (durante get_data) ou objeto (em validações)
+        $percent = 0;
+        $datatype = gettype($data);
+        if (is_array($data) && isset($data['completionpercent'])) {
+            $percent = $data['completionpercent'];
+        } else if (is_object($data) && isset($data->completionpercent)) {
+            $percent = $data->completionpercent;
+        }
+
+        $result = ($percent > 0);
+        error_log("BUNNYVIDEO RULE ENABLED CHECK: type={$datatype}, percent={$percent}, result=" . ($result ? 'true' : 'false'));
+        return $result;
     }
 
     // A validação pode permanecer como está.

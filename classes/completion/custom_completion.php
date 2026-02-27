@@ -40,6 +40,10 @@ class custom_completion extends activity_custom_completion
 
         $this->validate_rule($rule);
 
+        // Debug: Log the exact rule being requested and the cm customdata
+        $cmdata = isset($this->cm->customdata) ? json_encode($this->cm->customdata) : 'NONE';
+        error_log("BUNNYVIDEO GET_STATE CALLED FOR USER {$this->userid} RULE '{$rule}' CM_CUSTOMDATA: {$cmdata}");
+
         // Get the bunnyvideo instance to check if completionpercent is configured.
         $bunnyvideo = $DB->get_record('bunnyvideo', ['id' => $this->cm->instance], 'id, completionpercent', MUST_EXIST);
 
@@ -73,6 +77,28 @@ class custom_completion extends activity_custom_completion
     public static function get_defined_custom_rules(): array
     {
         return ['completionpercent'];
+    }
+
+    /**
+     * Returns an array of custom rule active for this instance.
+     * Overrides the base class because we do not use an unreliable course_module field.
+     * We just check our actual plugin instance table setting.
+     *
+     * @return array Array of active rule names
+     */
+    public function get_available_custom_rules(): array
+    {
+        global $DB;
+
+        // Fetch our plugin configuration for this instance
+        $bunnyvideo = $DB->get_record('bunnyvideo', ['id' => $this->cm->instance], 'completionpercent');
+
+        // If completionpercent is explicitly set and > 0, the rule is actively tracking
+        if ($bunnyvideo && $bunnyvideo->completionpercent > 0) {
+            return ['completionpercent'];
+        }
+
+        return [];
     }
 
     /**

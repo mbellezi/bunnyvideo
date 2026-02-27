@@ -192,7 +192,6 @@ function bunnyvideo_add_instance($bunnyvideo, $mform)
     // Processa as configurações de conclusão salvas por standard_completion_elements
     $cmid = $bunnyvideo->coursemodule; // Passado em $bunnyvideo por moodleform_mod
 
-    // NOTA: Removida a chamada para completion->update_completion_rules que não está disponível
     // O Moodle tratará automaticamente as configurações de conclusão padrão
     // O campo completionpercent é armazenado em nossa tabela bunnyvideo e usado pelo nosso JS
 
@@ -216,15 +215,14 @@ function bunnyvideo_update_instance($bunnyvideo, $mform)
     // Não é mais necessário verificar/desdefinir 'completionwhenpercentreached' aqui.
 
     // DEBUG: Ver o que está sendo salvo no banco
-    error_log("BUNNYVIDEO UPDATE: cmid=" . $bunnyvideo->coursemodule . ", completionpercent=" . (isset($bunnyvideo->completionpercent) ? $bunnyvideo->completionpercent : 'MISSING'));
-
+    $ccrules = isset($bunnyvideo->customcompletionrules) ? json_encode($bunnyvideo->customcompletionrules) : 'MISSING/NULL';
+    error_log("BUNNYVIDEO UPDATE: cmid=" . $bunnyvideo->coursemodule . ", completionpercent=" . (isset($bunnyvideo->completionpercent) ? $bunnyvideo->completionpercent : 'MISSING') . ", customcompletionrules: " . $ccrules);
 
     $result = $DB->update_record('bunnyvideo', $bunnyvideo);
 
     // Processa as configurações de conclusão salvas por standard_completion_elements
     $cmid = $bunnyvideo->coursemodule; // Passado em $bunnyvideo por moodleform_mod
 
-    // NOTA: Removida a chamada para completion->update_completion_rules que não está disponível 
     // O Moodle tratará automaticamente as configurações de conclusão padrão
     // O campo completionpercent é armazenado em nossa tabela bunnyvideo e usado pelo nosso JS
 
@@ -318,6 +316,8 @@ function bunnyvideo_get_completion_rules()
 function bunnyvideo_get_completion_state($course, $cm, $userid, $type)
 {
     global $DB;
+
+    error_log("BUNNYVIDEO LEGACY CALLBACK GET_STATE CALLED FOR USER {$userid} TYPE {$type}");
 
     // Obtém a instância para ver se completionpercent está configurado
     $bunnyvideo = $DB->get_record('bunnyvideo', ['id' => $cm->instance], 'id, completionpercent', MUST_EXIST);
