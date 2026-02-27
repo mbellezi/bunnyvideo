@@ -2,7 +2,7 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'mod_bunnyvideo';  // Nome completo do plugin (usado para diagnósticos)
-$plugin->version = 2026022703;        // Versão atualizada - clear stale progress data
+$plugin->version = 2026022704;        // Fix: completion rule name mismatch in mod_form
 $plugin->requires = 2021051700;        // Moodle 3.11+ (Ajuste conforme necessário para uso de módulo/API JS)
 $plugin->maturity = MATURITY_ALPHA;    // MATURITY_ALPHA, BETA, RC ou STABLE
 $plugin->release = '0.3.0';

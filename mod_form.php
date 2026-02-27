@@ -2,11 +2,13 @@
 defined('MOODLE_INTERNAL') || die();
 
 require_once($CFG->dirroot . '/course/moodleform_mod.php');
-require_once($CFG->libdir.'/completionlib.php'); // Necessário para a constante COMPLETION_TRACKING_NONE
+require_once($CFG->libdir . '/completionlib.php'); // Necessário para a constante COMPLETION_TRACKING_NONE
 
-class mod_bunnyvideo_mod_form extends moodleform_mod {
+class mod_bunnyvideo_mod_form extends moodleform_mod
+{
 
-    function definition() {
+    function definition()
+    {
         global $CFG, $DB, $OUTPUT;
 
         $mform = $this->_form;
@@ -14,7 +16,7 @@ class mod_bunnyvideo_mod_form extends moodleform_mod {
         //-------------------------------------------------------------------------------
         $mform->addElement('header', 'general', get_string('general', 'form'));
 
-        $mform->addElement('text', 'name', get_string('activityname', 'mod_bunnyvideo'), array('size'=>'64'));
+        $mform->addElement('text', 'name', get_string('activityname', 'mod_bunnyvideo'), array('size' => '64'));
         if (!empty($CFG->formatstringstriptags)) {
             $mform->setType('name', PARAM_TEXT);
         } else {
@@ -40,13 +42,17 @@ class mod_bunnyvideo_mod_form extends moodleform_mod {
         // Elementos padrão do Moodle para módulos (visibilidade, grupos, etc.)
         // Esta chamada é importante e deve permanecer.
         $this->standard_coursemodule_elements();
-        
+
         // Adiciona mensagem de aviso sobre conclusão automática apenas
-        $mform->addElement('static', 'completioninfo', '', 
-            '<div class="alert alert-info">'.
-            'A conclusão manual pelo usuário não está disponível para atividades Bunny Video. '.
-            'A conclusão será marcada automaticamente quando o vídeo for assistido até a porcentagem configurada.'.
-            '</div>');
+        $mform->addElement(
+            'static',
+            'completioninfo',
+            '',
+            '<div class="alert alert-info">' .
+            'A conclusão manual pelo usuário não está disponível para atividades Bunny Video. ' .
+            'A conclusão será marcada automaticamente quando o vídeo for assistido até a porcentagem configurada.' .
+            '</div>'
+        );
 
         //-------------------------------------------------------------------------------
         // Botões de ação (Salvar e voltar, Salvar e mostrar, Cancelar)
@@ -54,12 +60,13 @@ class mod_bunnyvideo_mod_form extends moodleform_mod {
     }
 
     /**
-      * Ajusta os dados após o envio do formulário, antes de salvar.
-      * Garante que completionpercent seja 0 se a conclusão estiver desabilitada.
-      * @param object $data dados do formulário
-      * @return object objeto de dados processado
-      */
-    public function data_postprocessing($data) {
+     * Ajusta os dados após o envio do formulário, antes de salvar.
+     * Garante que completionpercent seja 0 se a conclusão estiver desabilitada.
+     * @param object $data dados do formulário
+     * @return object objeto de dados processado
+     */
+    public function data_postprocessing($data)
+    {
         parent::data_postprocessing($data);
 
         // Se a conclusão da atividade estiver explicitamente desabilitada, forçar percentual para 0.
@@ -67,11 +74,11 @@ class mod_bunnyvideo_mod_form extends moodleform_mod {
         if (isset($data->completion) && $data->completion == COMPLETION_TRACKING_NONE) {
             $data->completionpercent = 0;
         } else if (isset($data->completionpercent) && ($data->completionpercent < 0 || $data->completionpercent > 100)) {
-             // Garante que o valor esteja no range 0-100 se a conclusão estiver habilitada. Fora do range, zera.
-             $data->completionpercent = 0;
+            // Garante que o valor esteja no range 0-100 se a conclusão estiver habilitada. Fora do range, zera.
+            $data->completionpercent = 0;
         } else if (!isset($data->completionpercent)) {
-             // Garante que seja 0 se não for definido por algum motivo (e a conclusão não está desabilitada)
-             $data->completionpercent = 0;
+            // Garante que seja 0 se não for definido por algum motivo (e a conclusão não está desabilitada)
+            $data->completionpercent = 0;
         }
 
         // Remove o campo antigo que era usado pela checkbox, caso ainda exista nos dados crus do POST
@@ -87,17 +94,22 @@ class mod_bunnyvideo_mod_form extends moodleform_mod {
      *
      * @return array
      */
-    public function add_completion_rules() {
+    public function add_completion_rules()
+    {
         $mform = $this->_form;
-        
-        $group = [];
-        $group[] = $mform->createElement('text', 'completionpercent', get_string('completionpercent', 'mod_bunnyvideo'), ['size' => 3]);
+
+        // IMPORTANT: The element name MUST match the rule name in
+        // custom_completion::get_defined_custom_rules() ('completionpercent').
+        // If there's a mismatch (e.g. using a group named 'completionpercentgroup'),
+        // Moodle stores the wrong key in customcompletionrules and considers
+        // the rule disabled → get_overall_completion_state() returns COMPLETE for all.
+        $mform->addElement('text', 'completionpercent', get_string('completionpercent', 'mod_bunnyvideo'), ['size' => 3]);
         $mform->setType('completionpercent', PARAM_INT);
-        $mform->addGroup($group, 'completionpercentgroup', get_string('completionpercent', 'mod_bunnyvideo'), ' ', false);
-        $mform->addHelpButton('completionpercentgroup', 'completionpercent', 'mod_bunnyvideo');
+        $mform->addHelpButton('completionpercent', 'completionpercent', 'mod_bunnyvideo');
         $mform->setDefault('completionpercent', 80);
-        
-        return ['completionpercentgroup'];
+        $mform->disabledIf('completionpercent', 'completion', 'neq', COMPLETION_TRACKING_AUTOMATIC);
+
+        return ['completionpercent'];
     }
 
     /**
@@ -107,27 +119,29 @@ class mod_bunnyvideo_mod_form extends moodleform_mod {
      * @param array $data Dados do formulário
      * @return boolean
      */
-    public function completion_rule_enabled($data) {
+    public function completion_rule_enabled($data)
+    {
         // A regra está habilitada se o campo de porcentagem tiver um valor maior que 0
         // O Moodle parece passar dados como um array aqui, apesar de ser objeto em outros lugares
         return (!empty($data['completionpercent']) && $data['completionpercent'] > 0);
     }
 
     // A validação pode permanecer como está.
-    function validation($data, $files) {
+    function validation($data, $files)
+    {
         $errors = parent::validation($data, $files);
 
         // Validação do embedcode
         $embedcode = trim($data['embedcode']);
         if (!empty($embedcode)) {
             if (!preg_match('/<iframe.*src=.*iframe\.mediadelivery\.net.*<\/iframe>/is', $embedcode)) {
-                 $errors['embedcode'] = get_string('invalidembedcode', 'mod_bunnyvideo');
+                $errors['embedcode'] = get_string('invalidembedcode', 'mod_bunnyvideo');
             }
         }
 
         // Validação de range (um pouco redundante, mas segura)
         if (isset($data['completionpercent']) && ($data['completionpercent'] < 0 || $data['completionpercent'] > 100)) {
-             $errors['completionpercent'] = get_string('invalidarg_numeric', 'completion', 100);
+            $errors['completionpercent'] = get_string('invalidarg_numeric', 'completion', 100);
         }
 
         return $errors;
