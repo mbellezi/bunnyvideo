@@ -33,34 +33,21 @@ function xmldb_bunnyvideo_upgrade($oldversion)
             $dbman->create_table($table);
         }
 
-        // Migrate existing completion data: for each user who has a completion record
-        // marked as COMPLETE for a bunnyvideo activity, create a bunnyvideo_progress record.
-        $sql = "SELECT cmc.userid, bv.id AS bunnyvideoid, cmc.timemodified
-                FROM {course_modules_completion} cmc
-                JOIN {course_modules} cm ON cm.id = cmc.coursemoduleid
-                JOIN {bunnyvideo} bv ON bv.id = cm.instance
-                WHERE cm.module = (SELECT id FROM {modules} WHERE name = 'bunnyvideo')
-                  AND cmc.completionstate = 1";
-
-        $records = $DB->get_records_sql($sql);
-        foreach ($records as $record) {
-            // Check if a progress record already exists (avoid duplicates).
-            if (
-                !$DB->record_exists('bunnyvideo_progress', [
-                    'bunnyvideoid' => $record->bunnyvideoid,
-                    'userid' => $record->userid,
-                ])
-            ) {
-                $progress = new stdClass();
-                $progress->bunnyvideoid = $record->bunnyvideoid;
-                $progress->userid = $record->userid;
-                $progress->completionmet = 1;
-                $progress->timemodified = $record->timemodified;
-                $DB->insert_record('bunnyvideo_progress', $progress);
-            }
-        }
+        // NOTE: We intentionally do NOT migrate existing completion data.
+        // All existing completion records were created by the bug that this
+        // upgrade fixes. The table starts empty and will only be populated
+        // by legitimate AJAX calls when students actually watch videos.
 
         upgrade_mod_savepoint(true, 2026022702, 'bunnyvideo');
+    }
+
+    if ($oldversion < 2026022703) {
+        // Clear all stale records from bunnyvideo_progress.
+        // The previous upgrade (2026022702) incorrectly migrated bug-caused
+        // completion records. This step clears them.
+        $DB->delete_records('bunnyvideo_progress');
+
+        upgrade_mod_savepoint(true, 2026022703, 'bunnyvideo');
     }
 
     return true;

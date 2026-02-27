@@ -240,6 +240,9 @@ function bunnyvideo_delete_instance($id)
         return false;
     }
 
+    // Limpa os registros de progresso de conclusão
+    $DB->delete_records('bunnyvideo_progress', array('bunnyvideoid' => $bunnyvideo->id));
+
     // Exclusão padrão - O Moodle lida com dados de conclusão relacionados etc.
     $DB->delete_records('bunnyvideo', array('id' => $bunnyvideo->id));
 
