@@ -214,10 +214,6 @@ function bunnyvideo_update_instance($bunnyvideo, $mform)
     // completionpercent agora é tratado corretamente por data_postprocessing em mod_form.php
     // Não é mais necessário verificar/desdefinir 'completionwhenpercentreached' aqui.
 
-    // DEBUG: Ver o que está sendo salvo no banco
-    $ccrules = isset($bunnyvideo->customcompletionrules) ? json_encode($bunnyvideo->customcompletionrules) : 'MISSING/NULL';
-    error_log("BUNNYVIDEO UPDATE: cmid=" . $bunnyvideo->coursemodule . ", completionpercent=" . (isset($bunnyvideo->completionpercent) ? $bunnyvideo->completionpercent : 'MISSING') . ", customcompletionrules: " . $ccrules);
-
     $result = $DB->update_record('bunnyvideo', $bunnyvideo);
 
     // Processa as configurações de conclusão salvas por standard_completion_elements

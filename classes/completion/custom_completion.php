@@ -40,9 +40,7 @@ class custom_completion extends activity_custom_completion
 
         $this->validate_rule($rule);
 
-        // Debug: Log the exact rule being requested and the cm customdata
-        $cmdata = isset($this->cm->customdata) ? json_encode($this->cm->customdata) : 'NONE';
-        error_log("BUNNYVIDEO GET_STATE CALLED FOR USER {$this->userid} RULE '{$rule}' CM_CUSTOMDATA: {$cmdata}");
+        $this->validate_rule($rule);
 
         // Get the bunnyvideo instance to check if completionpercent is configured.
         $bunnyvideo = $DB->get_record('bunnyvideo', ['id' => $this->cm->instance], 'id, completionpercent', MUST_EXIST);

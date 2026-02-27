@@ -2,9 +2,9 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'mod_bunnyvideo';  // Nome completo do plugin (usado para diagnósticos)
-$plugin->version = 2026022713;        // Fix: get_available_custom_rules override
+$plugin->version = 2026022714;        // Release: 0.3.1 - Completion Fix (Moodle 4.x get_available_custom_rules override)
 $plugin->requires = 2021051700;        // Moodle 3.11+ (Ajuste conforme necessário para uso de módulo/API JS)
 $plugin->maturity = MATURITY_ALPHA;    // MATURITY_ALPHA, BETA, RC ou STABLE
-$plugin->release = '0.3.0';
+$plugin->release = '0.3.1';
 $plugin->pluginname = get_string('pluginname', 'mod_bunnyvideo'); // Usa string de idioma
 $plugin->visible = true; // Explicitamente marcar o plugin como visível

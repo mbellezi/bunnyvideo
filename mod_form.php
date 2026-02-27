@@ -143,9 +143,7 @@ class mod_bunnyvideo_mod_form extends moodleform_mod
             $percent = $data->completionpercent;
         }
 
-        $result = ($percent > 0);
-        error_log("BUNNYVIDEO RULE ENABLED CHECK: type={$datatype}, percent={$percent}, result=" . ($result ? 'true' : 'false'));
-        return $result;
+        return ($percent > 0);
     }
 
     // A validação pode permanecer como está.
