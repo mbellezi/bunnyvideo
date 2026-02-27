@@ -300,6 +300,43 @@ function bunnyvideo_get_completion_rules()
 }
 
 /**
+ * Retorna o estado de conclusão atual para este módulo.
+ * IMPORTANTE: Essa função AINDA É OBRIGATÓRIA no Moodle para avaliar
+ * o estado de conclusão no backend, mesmo que tenhamos a classe custom_completion
+ * (a classe actvity_custom_completion é usada primariamente para a renderização da UI das regras em Moodle 4+).
+ *
+ * @param stdClass $course course object
+ * @param stdClass $cm course-module object
+ * @param int $userid User ID
+ * @param int $type Type of comparison (or/and; can be used as return value if no conditions)
+ * @return bool True if completed, false if not, $type if conditions not set.
+ */
+function bunnyvideo_get_completion_state($course, $cm, $userid, $type)
+{
+    global $DB;
+
+    // Obtém a instância para ver se completionpercent está configurado
+    $bunnyvideo = $DB->get_record('bunnyvideo', ['id' => $cm->instance], 'id, completionpercent', MUST_EXIST);
+
+    // Se nâo está configurado ou é 0, a regra é considerada satisfeita
+    if (empty($bunnyvideo->completionpercent) || $bunnyvideo->completionpercent <= 0) {
+        return $type; // Fallback to $type if conditions not effectively set
+    }
+
+    // Verifica se o aluno tem um registro de progresso atendido na tabela
+    $progress = $DB->get_record('bunnyvideo_progress', [
+        'bunnyvideoid' => $bunnyvideo->id,
+        'userid' => $userid,
+    ]);
+
+    if ($progress && $progress->completionmet == 1) {
+        return true;
+    }
+
+    return false;
+}
+
+/**
  * Obtém estilos CSS para o módulo bunnyvideo
  *
  * @return array Array de arquivos CSS para incluir
