@@ -215,6 +215,10 @@ function bunnyvideo_update_instance($bunnyvideo, $mform)
     // completionpercent agora é tratado corretamente por data_postprocessing em mod_form.php
     // Não é mais necessário verificar/desdefinir 'completionwhenpercentreached' aqui.
 
+    // DEBUG: Ver o que está sendo salvo no banco
+    error_log("BUNNYVIDEO UPDATE: cmid=" . $bunnyvideo->coursemodule . ", completionpercent=" . (isset($bunnyvideo->completionpercent) ? $bunnyvideo->completionpercent : 'MISSING'));
+
+
     $result = $DB->update_record('bunnyvideo', $bunnyvideo);
 
     // Processa as configurações de conclusão salvas por standard_completion_elements
@@ -330,9 +334,29 @@ function bunnyvideo_get_completion_state($course, $cm, $userid, $type)
     ]);
 
     if ($progress && $progress->completionmet == 1) {
-        return true;
+        return COMPLETION_COMPLETE;
     }
 
+    return COMPLETION_INCOMPLETE;
+}
+
+/**
+ * Determine if the completion settings have changed and whether a re-evaluation is needed.
+ * Returning true forces Moodle to re-check completion for everyone. For bunnyvideo,
+ * the completion is driven by the AJAX calls in the background tracking progress in our custom table.
+ * We do not want Moodle deleting our progress or mass re-evaluating just because
+ * properties like completionpercent changed, as this can trigger false positives when
+ * rules are missing in customdata.
+ * 
+ * @param stdClass $olddata Antigo mform data
+ * @param stdClass $newdata Novo mform data
+ * @return bool True if completion state should be re-evaluated
+ */
+function bunnyvideo_cm_completion_settings_changed($olddata, $newdata)
+{
+    // Apenas retorne falso. 
+    // Mudar a meta de porcentagem não deve marcar todo mundo concluído ou remover os registros
+    // de quem já havia concluído pela porcentagem antiga (ao menos que o professor force reset via Moodle UI).
     return false;
 }
 
