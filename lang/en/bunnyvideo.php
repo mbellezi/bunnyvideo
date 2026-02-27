@@ -27,6 +27,7 @@ $string['ajax_mark_complete_description'] = 'AJAX service to update completion s
 $string['error_cannotmarkcomplete'] = 'Could not mark activity as complete.';
 $string['error_invalidcoursemodule'] = 'Invalid course module ID.';
 $string['completionpercenthelp'] = 'User must watch at least {$a}% of the video';
+$string['completionpercentdesc'] = 'Student must watch at least {$a}% of the video';
 $string['completion_status_complete'] = 'Activity completed ✓';
 $string['completion_status_incomplete'] = 'To complete this activity, you need to watch at least {$a}% of the video.';
 $string['toggle_completion'] = 'Toggle completion status';

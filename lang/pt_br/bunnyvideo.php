@@ -29,6 +29,7 @@ $string['ajax_mark_complete_description'] = 'Serviço AJAX para atualizar o stat
 $string['error_cannotmarkcomplete'] = 'Não foi possível marcar a atividade como concluída.';
 $string['error_invalidcoursemodule'] = 'ID de módulo de curso inválido.';
 $string['completionpercenthelp'] = 'O usuário deve assistir pelo menos {$a}% do vídeo';
+$string['completionpercentdesc'] = 'O aluno deve assistir pelo menos {$a}% do vídeo';
 $string['completion_status_complete'] = 'Atividade concluída ✓';
 $string['completion_status_incomplete'] = 'Para concluir esta atividade, você precisa assistir pelo menos {$a}% do vídeo.';
 $string['toggle_completion'] = 'Alternar status de conclusão';
