@@ -85,6 +85,8 @@ class completion_ajax extends \external_api
             $progress->bunnyvideoid = $bunnyvideo->id;
             $progress->userid = $USER->id;
             $progress->completionmet = 1;
+            $progress->lastposition = 0;
+            $progress->positionmodified = 0;
             $progress->timemodified = time();
             $DB->insert_record('bunnyvideo_progress', $progress);
         }
@@ -115,6 +117,67 @@ class completion_ajax extends \external_api
             array(
                 'success' => new \external_value(PARAM_BOOL, 'Verdadeiro se a conclusão foi marcada com sucesso'),
                 'message' => new \external_value(PARAM_TEXT, 'Mensagem opcional (ex: detalhes do erro)', VALUE_OPTIONAL)
+            )
+        );
+    }
+
+    /**
+     * Define os parâmetros para a função save_position.
+     * @return \external_function_parameters
+     */
+    public static function save_position_parameters()
+    {
+        return new \external_function_parameters(
+            array(
+                'cmid' => new \external_value(PARAM_INT, 'O ID do módulo do curso'),
+                'position' => new \external_value(PARAM_FLOAT, 'Posição atual do vídeo em segundos')
+            )
+        );
+    }
+
+    /**
+     * Salva a posição atual do player sem alterar o estado de conclusão.
+     * @param int $cmid ID do módulo do curso.
+     * @param float $position Posição atual em segundos.
+     * @return array Status de sucesso e posição salva.
+     */
+    public static function save_position($cmid, $position)
+    {
+        global $USER, $DB;
+
+        $params = self::validate_parameters(self::save_position_parameters(), array(
+            'cmid' => $cmid,
+            'position' => $position
+        ));
+
+        $cm = get_coursemodule_from_id('bunnyvideo', $params['cmid'], 0, false, MUST_EXIST);
+        $course = $DB->get_record('course', array('id' => $cm->course), '*', MUST_EXIST);
+        $context = \context_module::instance($cm->id);
+        self::validate_context($context);
+        require_capability('mod/bunnyvideo:view', $context);
+
+        $bunnyvideo = $DB->get_record('bunnyvideo', array('id' => $cm->instance), '*', MUST_EXIST);
+        $savedposition = bunnyvideo_save_playback_position($bunnyvideo->id, $USER->id, $params['position']);
+
+        \core\session\manager::write_close();
+        return array(
+            'success' => true,
+            'position' => $savedposition,
+            'message' => 'Position saved'
+        );
+    }
+
+    /**
+     * Define o valor de retorno para a função save_position.
+     * @return \external_single_structure
+     */
+    public static function save_position_returns()
+    {
+        return new \external_single_structure(
+            array(
+                'success' => new \external_value(PARAM_BOOL, 'Verdadeiro se a posição foi salva'),
+                'position' => new \external_value(PARAM_INT, 'Posição salva em segundos'),
+                'message' => new \external_value(PARAM_TEXT, 'Mensagem opcional', VALUE_OPTIONAL)
             )
         );
     }

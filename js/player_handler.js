@@ -12,7 +12,11 @@ var BunnyVideoDebugConfig = {
     showDebugUI: false,
     
     // Resolução para rastreamento de tempo (em segundos) - valores menores são mais precisos, mas consomem mais memória
-    timeTrackingResolution: 1
+    timeTrackingResolution: 1,
+
+    // Mantém o código de autosave periódico disponível, mas desligado para reduzir carga.
+    enablePeriodicPositionSaving: false,
+    positionSaveIntervalMs: 60000
 };
 
 // Auxiliar de registro de depuração simples com níveis - sempre mostra mensagens importantes
@@ -69,7 +73,13 @@ window.BunnyVideoHandler = {
     maxPercentReached: 0,
     completionSent: false,
     progressTimer: null,
+    positionSaveTimer: null,
     playerReady: false,
+    currentPosition: 0,
+    currentDuration: 0,
+    lastSavedPosition: null,
+    resumeAttempted: false,
+    positionEventsAttached: false,
     
     // Variáveis de rastreamento de tempo
     watchedSegments: [], // Array de intervalos de tempo assistidos [início, fim]
@@ -87,6 +97,7 @@ window.BunnyVideoHandler = {
         bunnyVideoLog('LIMITE DE CONCLUSÃO ATINGIDO (' + this.maxPercentReached.toFixed(1) + '% ≥ ' + 
                 this.config.completionPercent + '%)', null, 'success');
         this.completionSent = true;
+        this.savePlaybackPosition(false);
         
         // Usa fetch padrão para chamada AJAX
         var ajaxUrl = M.cfg.wwwroot + '/mod/bunnyvideo/ajax.php';
@@ -144,6 +155,208 @@ window.BunnyVideoHandler = {
         // Também mostra um indicador visual
         this.showCompletionIndicator();
     },
+
+    // Extrai posição e duração dos formatos emitidos pelo Bunny Player.
+    extractTimingData: function(timingData) {
+        if (typeof timingData === 'string') {
+            timingData = JSON.parse(timingData);
+        }
+
+        var currentTime;
+        var duration;
+
+        if (timingData && typeof timingData.seconds !== 'undefined' && typeof timingData.duration !== 'undefined') {
+            currentTime = parseFloat(timingData.seconds);
+            duration = parseFloat(timingData.duration);
+        } else if (timingData && typeof timingData.currentTime !== 'undefined' && typeof timingData.duration !== 'undefined') {
+            currentTime = parseFloat(timingData.currentTime);
+            duration = parseFloat(timingData.duration);
+        } else if (timingData) {
+            for (var key in timingData) {
+                if (!Object.prototype.hasOwnProperty.call(timingData, key)) {
+                    continue;
+                }
+
+                var value = timingData[key];
+                if (typeof value === 'number' || (typeof value === 'string' && !isNaN(parseFloat(value)))) {
+                    if (key.toLowerCase().indexOf('time') !== -1 && key.toLowerCase().indexOf('current') !== -1) {
+                        currentTime = parseFloat(value);
+                    } else if (key.toLowerCase().indexOf('duration') !== -1) {
+                        duration = parseFloat(value);
+                    }
+                }
+            }
+        }
+
+        return {
+            currentTime: currentTime,
+            duration: duration
+        };
+    },
+
+    // Mantém a posição atual separada do cálculo de conclusão.
+    updateCurrentPlaybackPosition: function(currentTime, duration) {
+        if (!isNaN(currentTime) && currentTime >= 0) {
+            this.currentPosition = currentTime;
+        }
+
+        if (!isNaN(duration) && duration > 0) {
+            this.currentDuration = duration;
+        }
+    },
+
+    // Salva a posição atual sem alterar completionmet.
+    savePlaybackPosition: function(force) {
+        if (!this.config || !this.config.cmid) {
+            return;
+        }
+
+        var position = Math.max(0, Math.round(parseFloat(this.currentPosition) || 0));
+        if (!force && this.lastSavedPosition !== null && Math.abs(position - this.lastSavedPosition) < 1) {
+            return;
+        }
+
+        var ajaxUrl = M.cfg.wwwroot + '/mod/bunnyvideo/ajax.php';
+        var params = new URLSearchParams();
+        params.append('action', 'save_position');
+        params.append('cmid', this.config.cmid);
+        params.append('position', position);
+        params.append('sesskey', M.cfg.sesskey);
+
+        if (force && navigator.sendBeacon) {
+            try {
+                var beaconData = window.Blob
+                    ? new Blob([params.toString()], {type: 'application/x-www-form-urlencoded'})
+                    : params;
+
+                if (navigator.sendBeacon(ajaxUrl, beaconData)) {
+                    this.lastSavedPosition = position;
+                    bunnyVideoLog('Posição enviada ao sair da página: ' + this.formatTime(position), null, 'debug');
+                    return;
+                }
+            } catch (e) {
+                bunnyVideoLog('sendBeacon falhou ao salvar posição, tentando XHR', e, 'debug');
+            }
+        }
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', ajaxUrl, !force);
+        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+        var self = this;
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                self.lastSavedPosition = position;
+                bunnyVideoLog('Posição salva: ' + self.formatTime(position), null, 'debug');
+            } else {
+                bunnyVideoLog('Falha ao salvar posição, status: ' + xhr.status, null, 'warn');
+            }
+        };
+        xhr.onerror = function() {
+            bunnyVideoLog('Erro de rede ao salvar posição', null, 'warn');
+        };
+
+        try {
+            xhr.send(params.toString());
+            if (force) {
+                this.lastSavedPosition = position;
+            }
+        } catch (e) {
+            bunnyVideoLog('Erro ao enviar posição do vídeo:', e, 'warn');
+        }
+    },
+
+    // Inicia o salvamento periódico e os eventos de saída da página.
+    startPositionSaving: function() {
+        var self = this;
+
+        if (this.positionSaveTimer) {
+            clearInterval(this.positionSaveTimer);
+        }
+
+        if (BunnyVideoDebugConfig.enablePeriodicPositionSaving) {
+            this.positionSaveTimer = setInterval(function() {
+                self.savePlaybackPosition(false);
+            }, BunnyVideoDebugConfig.positionSaveIntervalMs);
+        }
+
+        if (!this.positionEventsAttached) {
+            var flushPosition = function() {
+                self.savePlaybackPosition(true);
+            };
+
+            window.addEventListener('pagehide', flushPosition);
+            window.addEventListener('beforeunload', flushPosition);
+            document.addEventListener('visibilitychange', function() {
+                if (document.visibilityState === 'hidden') {
+                    flushPosition();
+                }
+            });
+
+            this.positionEventsAttached = true;
+        }
+    },
+
+    // Retoma o vídeo da posição salva para este usuário e esta atividade.
+    resumePlaybackPosition: function() {
+        if (this.resumeAttempted || !this.config) {
+            return;
+        }
+
+        var position = parseFloat(this.config.lastPosition || 0);
+        if (isNaN(position) || position <= 0) {
+            this.resumeAttempted = true;
+            return;
+        }
+
+        if (this.currentDuration > 0 && position >= this.currentDuration) {
+            position = Math.max(0, this.currentDuration - 2);
+        }
+
+        this.resumeAttempted = true;
+        this.currentPosition = position;
+        this.lastPosition = null;
+        bunnyVideoLog('Retomando vídeo em ' + this.formatTime(position), null, 'info');
+        this.seekToPosition(position);
+    },
+
+    // Tenta as formas conhecidas de seek suportadas pelas variações da API Player.js.
+    seekToPosition: function(position) {
+        var self = this;
+        var attempts = 0;
+
+        var trySeek = function() {
+            attempts++;
+
+            try {
+                if (self.playerInstance && typeof self.playerInstance.setCurrentTime === 'function') {
+                    self.playerInstance.setCurrentTime(position);
+                    return;
+                }
+
+                if (self.playerInstance && typeof self.playerInstance.api === 'function') {
+                    self.playerInstance.api('seek', position);
+                    self.playerInstance.api('setCurrentTime', position);
+                    self.playerInstance.api('currentTime', position);
+                    return;
+                }
+
+                if (self.playerInstance && typeof self.playerInstance.sendMessage === 'function') {
+                    self.playerInstance.sendMessage('setCurrentTime', position);
+                    return;
+                }
+            } catch (e) {
+                bunnyVideoLog('Tentativa de retomar posição falhou:', e, 'warn');
+            }
+
+            if (attempts < 3) {
+                setTimeout(trySeek, 500);
+            }
+        };
+
+        setTimeout(trySeek, 300);
+    },
     
     // Para depuração - dispara manualmente a conclusão
     debugTriggerCompletion: function() {
@@ -158,54 +371,24 @@ window.BunnyVideoHandler = {
             bunnyVideoLog('Sem configuração disponível', null, 'error');
             return;
         }
-        
-        if (this.config.completionPercent <= 0) {
-            bunnyVideoLog('Porcentagem de conclusão não definida ou zero', null, 'debug');
-            return; 
-        }
-        
-        if (this.completionSent) {
-            return;
-        }
-        
+
         try {
             bunnyVideoLog('Evento timeupdate recebido', timingData, 'debug');
-            
-            // Parseia os dados se for uma string
-            if (typeof timingData === 'string') {
-                timingData = JSON.parse(timingData);
+            var timing = this.extractTimingData(timingData);
+            var currentTime = parseFloat(timing.currentTime);
+            var duration = parseFloat(timing.duration);
+
+            this.updateCurrentPlaybackPosition(currentTime, duration);
+
+            if (this.config.completionPercent <= 0) {
+                bunnyVideoLog('Porcentagem de conclusão não definida ou zero', null, 'debug');
+                return;
             }
-            
-            // Diferentes implementações de player.js podem ter formatos de dados diferentes
-            var currentTime, duration;
-            
-            // Verifica se os dados têm o formato padrão do player.js
-            if (timingData && typeof timingData.seconds !== 'undefined' && typeof timingData.duration !== 'undefined') {
-                bunnyVideoLog('Usando formato de dados padrão do Player.js', null, 'debug');
-                currentTime = parseFloat(timingData.seconds);
-                duration = parseFloat(timingData.duration);
-            } 
-            // Algumas implementações podem usar um formato diferente
-            else if (timingData && typeof timingData.currentTime !== 'undefined' && typeof timingData.duration !== 'undefined') {
-                bunnyVideoLog('Usando formato de dados alternativo com currentTime', null, 'debug');
-                currentTime = parseFloat(timingData.currentTime);
-                duration = parseFloat(timingData.duration);
+
+            if (this.completionSent) {
+                return;
             }
-            // Se tudo mais falhar, tenta extrair de possíveis outros formatos
-            else if (timingData) {
-                // Tenta encontrar quaisquer propriedades que possam conter informações de tempo
-                for (var key in timingData) {
-                    var value = timingData[key];
-                    if (typeof value === 'number' || (typeof value === 'string' && !isNaN(parseFloat(value)))) {
-                        if (key.toLowerCase().indexOf('time') !== -1 && key.toLowerCase().indexOf('current') !== -1) {
-                            currentTime = parseFloat(value);
-                        } else if (key.toLowerCase().indexOf('duration') !== -1) {
-                            duration = parseFloat(value);
-                        }
-                    }
-                }
-            }
-            
+
             // Se tivermos ambos os valores de tempo, podemos atualizar o progresso
             if (!isNaN(currentTime) && !isNaN(duration) && duration > 0) {
                 var currentTimeRounded = Math.round(currentTime / BunnyVideoDebugConfig.timeTrackingResolution) * BunnyVideoDebugConfig.timeTrackingResolution;
@@ -382,7 +565,7 @@ window.BunnyVideoHandler = {
         bunnyVideoLog('Iniciando polling de progresso como backup', null, 'info');
         
         this.progressTimer = setInterval(function() {
-            if (!self.playerInstance || !self.playerReady || self.completionSent) return;
+            if (!self.playerInstance || !self.playerReady) return;
             
             try {
                 // Tenta obter o tempo atual e a duração via chamada de API
@@ -397,6 +580,8 @@ window.BunnyVideoHandler = {
                         // Alguns players podem não suportar esses métodos
                         return;
                     }
+
+                    self.updateCurrentPlaybackPosition(currentTime, duration);
                     
                     if (duration > 0) {
                         var percentWatched = (currentTime / duration) * 100;
@@ -411,7 +596,7 @@ window.BunnyVideoHandler = {
                         }
                         
                         // Verifica o limite de conclusão
-                        if (self.maxPercentReached >= self.config.completionPercent) {
+                        if (self.config.completionPercent > 0 && !self.completionSent && self.maxPercentReached >= self.config.completionPercent) {
                             bunnyVideoLog('[POLL] LIMITE DE CONCLUSÃO ATINGIDO!', null, 'success');
                             self.sendCompletion();
                         }
@@ -630,6 +815,8 @@ window.BunnyVideoHandler = {
         this.playerInstance.on('ready', function() {
             bunnyVideoLog('Evento ready do player recebido', null, 'success');
             self.playerReady = true;
+            self.startPositionSaving();
+            self.resumePlaybackPosition();
             
             // Configura vários listeners de evento
             self.playerInstance.on('timeupdate', function(data) {
@@ -717,6 +904,8 @@ window.BunnyVideoHandler = {
             this.playerInstance.on('ready', function() {
                 bunnyVideoLog('Evento ready do player recebido', null, 'success');
                 self.playerReady = true;
+                self.startPositionSaving();
+                self.resumePlaybackPosition();
                 
                 // Configura vários listeners de evento
                 self.playerInstance.on('timeupdate', function(data) {
@@ -814,6 +1003,8 @@ window.BunnyVideoHandler = {
         customPlayer.on('ready', function() {
             bunnyVideoLog('Evento ready do player personalizado recebido', null, 'success');
             self.playerReady = true;
+            self.startPositionSaving();
+            self.resumePlaybackPosition();
             
             // Configura vários listeners de evento
             customPlayer.on('timeupdate', function(data) {

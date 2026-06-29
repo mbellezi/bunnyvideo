@@ -50,5 +50,27 @@ function xmldb_bunnyvideo_upgrade($oldversion)
         upgrade_mod_savepoint(true, 2026022703, 'bunnyvideo');
     }
 
+    if ($oldversion < 2026022715) {
+        $table = new xmldb_table('bunnyvideo_progress');
+        $field = new xmldb_field('lastposition', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'completionmet');
+
+        if ($dbman->table_exists($table) && !$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_mod_savepoint(true, 2026022715, 'bunnyvideo');
+    }
+
+    if ($oldversion < 2026022716) {
+        $table = new xmldb_table('bunnyvideo_progress');
+        $field = new xmldb_field('positionmodified', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0', 'lastposition');
+
+        if ($dbman->table_exists($table) && !$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        upgrade_mod_savepoint(true, 2026022716, 'bunnyvideo');
+    }
+
     return true;
 }

@@ -25,6 +25,7 @@
 define('AJAX_SCRIPT', true);
 require_once('../../config.php');
 require_once($CFG->libdir . '/completionlib.php');
+require_once($CFG->dirroot . '/mod/bunnyvideo/lib.php');
 
 // Obtém e valida os parâmetros
 $action = required_param('action', PARAM_ALPHA);
@@ -55,10 +56,20 @@ $PAGE->set_context($context);
 
 // Verifica se o usuário está logado
 require_login($course, false, $cm);
+require_capability('mod/bunnyvideo:view', $context);
 
 // Prepara a resposta
 
-if ($action === 'mark_complete' || $action === 'markcomplete') {
+if ($action === 'save_position' || $action === 'saveposition') {
+    $position = required_param('position', PARAM_FLOAT);
+    $savedposition = bunnyvideo_save_playback_position($bunnyvideo->id, $USER->id, $position);
+
+    $response['success'] = true;
+    $response['position'] = $savedposition;
+    $response['message'] = 'Position saved';
+
+    \core\session\manager::write_close();
+} else if ($action === 'mark_complete' || $action === 'markcomplete') {
     // Verifica se a conclusão está habilitada para este curso e módulo
     $completion = new completion_info($course);
 
@@ -88,6 +99,8 @@ if ($action === 'mark_complete' || $action === 'markcomplete') {
             $progress->bunnyvideoid = $bunnyvideo->id;
             $progress->userid = $USER->id;
             $progress->completionmet = 1;
+            $progress->lastposition = 0;
+            $progress->positionmodified = 0;
             $progress->timemodified = time();
             $DB->insert_record('bunnyvideo_progress', $progress);
         }

@@ -10,6 +10,15 @@ $functions = array(
         'ajax'          => true,    // Available via AJAX
         'capabilities'  => 'mod/bunnyvideo:view', // Usuário precisa pelo menos da capacidade de visualização
     ),
+
+    'mod_bunnyvideo_save_position' => array(
+        'classname'     => 'mod_bunnyvideo\external\completion_ajax',
+        'methodname'    => 'save_position',
+        'description'   => 'Saves the current Bunny Video playback position for the current user without changing completion.',
+        'type'          => 'write',
+        'ajax'          => true,
+        'capabilities'  => 'mod/bunnyvideo:view',
+    ),
     
     'mod_bunnyvideo_toggle_completion' => array(
         'classname'     => 'mod_bunnyvideo\external\completion_ajax',
