@@ -16,6 +16,9 @@ class restore_bunnyvideo_activity_structure_step extends restore_activity_struct
         $data = (object)$data;
         $oldid = $data->id;
         $data->course = $this->get_courseid();
+        if (!isset($data->grade)) {
+            $data->grade = 100;
+        }
 
         // Ajusta o formato da introdução e os links, se necessário, usando o contexto do plano de restauração
         $data->introformat = $this->apply_date_offset($data->introformat);

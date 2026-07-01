@@ -6,6 +6,17 @@ require_once($CFG->libdir . '/completionlib.php');
 // require_once($CFG->dirroot . '/mod/bunnyvideo/classes/event/course_module_viewed.php'); // Não é mais necessário aqui
 
 /**
+ * Checks whether a Moodle completion state means completed.
+ *
+ * @param int $completionstate Moodle completion state.
+ * @return bool
+ */
+function bunnyvideo_completion_state_is_complete($completionstate)
+{
+    return in_array((int) $completionstate, [COMPLETION_COMPLETE, COMPLETION_COMPLETE_PASS], true);
+}
+
+/**
  * @param stdClass $bunnyvideo Uma instância de bunnyvideo do banco de dados
  * @param stdClass $cm A instância do módulo do curso à qual pertence
  * @param context_module $context O contexto da instância do módulo
@@ -196,6 +207,7 @@ function bunnyvideo_save_playback_position($bunnyvideoid, $userid, $position, $t
     $position = max(0, (int) round($position));
     $timewatched = $timewatched === null ? null : max(0, (int) round($timewatched));
     $now = time();
+    $created = false;
 
     $progressrecord = $DB->get_record('bunnyvideo_progress', [
         'bunnyvideoid' => $bunnyvideoid,
@@ -219,9 +231,233 @@ function bunnyvideo_save_playback_position($bunnyvideoid, $userid, $position, $t
         $progress->timewatched = $timewatched === null ? 0 : $timewatched;
         $progress->timemodified = 0;
         $DB->insert_record('bunnyvideo_progress', $progress);
+        $created = true;
+    }
+
+    if ($created) {
+        $bunnyvideo = $DB->get_record('bunnyvideo', ['id' => $bunnyvideoid], '*', MUST_EXIST);
+        bunnyvideo_update_completion_grade($bunnyvideo, $userid, false);
     }
 
     return $position;
+}
+
+/**
+ * Updates the custom BunnyVideo progress table for a completion transition.
+ *
+ * @param int $bunnyvideoid BunnyVideo instance ID.
+ * @param int $userid User ID.
+ * @param bool $completed Whether completion has been met.
+ * @return bool True if the stored progress completion value changed.
+ */
+function bunnyvideo_set_progress_completion($bunnyvideoid, $userid, $completed)
+{
+    global $DB;
+
+    $completionmet = $completed ? 1 : 0;
+    $now = time();
+    $changed = false;
+
+    $progressrecord = $DB->get_record('bunnyvideo_progress', [
+        'bunnyvideoid' => $bunnyvideoid,
+        'userid' => $userid,
+    ]);
+
+    if ($progressrecord) {
+        if ((int) $progressrecord->completionmet !== $completionmet) {
+            $progressrecord->completionmet = $completionmet;
+            $progressrecord->timemodified = $completed ? $now : 0;
+            $DB->update_record('bunnyvideo_progress', $progressrecord);
+            $changed = true;
+        }
+    } else {
+        $progress = new stdClass();
+        $progress->bunnyvideoid = $bunnyvideoid;
+        $progress->userid = $userid;
+        $progress->completionmet = $completionmet;
+        $progress->lastposition = 0;
+        $progress->positionmodified = 0;
+        $progress->timewatched = 0;
+        $progress->timemodified = $completed ? $now : 0;
+        $DB->insert_record('bunnyvideo_progress', $progress);
+        $changed = true;
+    }
+
+    return $changed;
+}
+
+/**
+ * Gets the highest raw grade for this activity.
+ *
+ * @param stdClass $bunnyvideo BunnyVideo instance.
+ * @return float
+ */
+function bunnyvideo_get_max_grade($bunnyvideo)
+{
+    global $DB;
+
+    if (!isset($bunnyvideo->grade)) {
+        $bunnyvideo->grade = 100;
+    }
+
+    $grade = (int) $bunnyvideo->grade;
+    if ($grade > 0) {
+        return (float) $grade;
+    }
+
+    if ($grade < 0) {
+        $scale = $DB->get_record('scale', ['id' => -$grade], 'scale');
+        if ($scale && trim($scale->scale) !== '') {
+            return (float) count(explode(',', $scale->scale));
+        }
+    }
+
+    return 0.0;
+}
+
+/**
+ * Creates or updates the grade item for a BunnyVideo activity.
+ *
+ * @category grade
+ * @param stdClass $bunnyvideo BunnyVideo instance.
+ * @param array|stdClass|string|null $grades Optional grade data, or 'reset'.
+ * @return int Grade update result.
+ */
+function bunnyvideo_grade_item_update($bunnyvideo, $grades = null)
+{
+    global $CFG;
+
+    require_once($CFG->libdir . '/gradelib.php');
+
+    if (!isset($bunnyvideo->grade)) {
+        $bunnyvideo->grade = 100;
+    }
+
+    $params = ['itemname' => $bunnyvideo->name];
+    if (isset($bunnyvideo->cmidnumber)) {
+        $params['idnumber'] = $bunnyvideo->cmidnumber;
+    }
+
+    if ((int) $bunnyvideo->grade > 0) {
+        $params['gradetype'] = GRADE_TYPE_VALUE;
+        $params['grademax'] = (int) $bunnyvideo->grade;
+        $params['grademin'] = 0;
+    } else if ((int) $bunnyvideo->grade < 0) {
+        $params['gradetype'] = GRADE_TYPE_SCALE;
+        $params['scaleid'] = -(int) $bunnyvideo->grade;
+    } else {
+        $params['gradetype'] = GRADE_TYPE_NONE;
+    }
+
+    if ($grades === 'reset') {
+        $params['reset'] = true;
+        $grades = null;
+    } else if (!empty($grades)) {
+        if (is_object($grades)) {
+            $grades = [$grades->userid => $grades];
+        } else if (is_array($grades) && array_key_exists('userid', $grades)) {
+            $grades = [$grades['userid'] => $grades];
+        }
+    }
+
+    return grade_update('mod/bunnyvideo', $bunnyvideo->course, 'mod', 'bunnyvideo', $bunnyvideo->id, 0, $grades, $params);
+}
+
+/**
+ * Deletes the grade item for a BunnyVideo activity.
+ *
+ * @category grade
+ * @param stdClass $bunnyvideo BunnyVideo instance.
+ * @return int Grade update result.
+ */
+function bunnyvideo_grade_item_delete($bunnyvideo)
+{
+    global $CFG;
+
+    require_once($CFG->libdir . '/gradelib.php');
+
+    return grade_update(
+        'mod/bunnyvideo',
+        $bunnyvideo->course,
+        'mod',
+        'bunnyvideo',
+        $bunnyvideo->id,
+        0,
+        null,
+        ['deleted' => 1]
+    );
+}
+
+/**
+ * Updates one user's grade from a completion state.
+ *
+ * @param stdClass $bunnyvideo BunnyVideo instance.
+ * @param int $userid User ID.
+ * @param bool $completed Whether the activity is complete.
+ * @return int Grade update result.
+ */
+function bunnyvideo_update_completion_grade($bunnyvideo, $userid, $completed)
+{
+    $grade = new stdClass();
+    $grade->userid = $userid;
+    $grade->rawgrade = $completed ? bunnyvideo_get_max_grade($bunnyvideo) : 0;
+    $grade->dategraded = time();
+
+    return bunnyvideo_grade_item_update($bunnyvideo, $grade);
+}
+
+/**
+ * Returns user grades derived from BunnyVideo progress records.
+ *
+ * @param stdClass $bunnyvideo BunnyVideo instance.
+ * @param int $userid Optional user ID. Use 0 for all progress records.
+ * @return array
+ */
+function bunnyvideo_get_user_grades($bunnyvideo, $userid = 0)
+{
+    global $DB;
+
+    $params = ['bunnyvideoid' => $bunnyvideo->id];
+    $where = 'bunnyvideoid = :bunnyvideoid';
+    if ($userid) {
+        $where .= ' AND userid = :userid';
+        $params['userid'] = $userid;
+    }
+
+    $progressrecords = $DB->get_records_select('bunnyvideo_progress', $where, $params);
+    $grades = [];
+
+    foreach ($progressrecords as $progress) {
+        $grade = new stdClass();
+        $grade->userid = $progress->userid;
+        $grade->rawgrade = ((int) $progress->completionmet === 1) ? bunnyvideo_get_max_grade($bunnyvideo) : 0;
+        $grade->dategraded = !empty($progress->timemodified) ? $progress->timemodified : time();
+        $grades[$progress->userid] = $grade;
+    }
+
+    return $grades;
+}
+
+/**
+ * Updates grades in the gradebook from BunnyVideo progress records.
+ *
+ * @category grade
+ * @param stdClass $bunnyvideo BunnyVideo instance.
+ * @param int $userid Optional user ID. Use 0 for all progress records.
+ * @param bool $nullifnone Kept for Moodle callback compatibility. BunnyVideo uses 0 when a user has no grade.
+ * @return void
+ */
+function bunnyvideo_update_grades($bunnyvideo, $userid = 0, $nullifnone = true)
+{
+    $grades = bunnyvideo_get_user_grades($bunnyvideo, $userid);
+
+    if ($grades) {
+        bunnyvideo_grade_item_update($bunnyvideo, $grades);
+    } else if ($userid && $nullifnone) {
+        bunnyvideo_update_completion_grade($bunnyvideo, $userid, false);
+    } else {
+        bunnyvideo_grade_item_update($bunnyvideo);
+    }
 }
 
 /**
@@ -241,6 +477,7 @@ function bunnyvideo_add_instance($bunnyvideo, $mform)
     // Não é mais necessário verificar/desdefinir 'completionwhenpercentreached' aqui.
 
     $bunnyvideo->id = $DB->insert_record('bunnyvideo', $bunnyvideo);
+    bunnyvideo_grade_item_update($bunnyvideo);
 
     // Processa as configurações de conclusão salvas por standard_completion_elements
     $cmid = $bunnyvideo->coursemodule; // Passado em $bunnyvideo por moodleform_mod
@@ -268,6 +505,8 @@ function bunnyvideo_update_instance($bunnyvideo, $mform)
     // Não é mais necessário verificar/desdefinir 'completionwhenpercentreached' aqui.
 
     $result = $DB->update_record('bunnyvideo', $bunnyvideo);
+    bunnyvideo_grade_item_update($bunnyvideo);
+    bunnyvideo_update_grades($bunnyvideo, 0, false);
 
     // Processa as configurações de conclusão salvas por standard_completion_elements
     $cmid = $bunnyvideo->coursemodule; // Passado em $bunnyvideo por moodleform_mod
@@ -293,6 +532,7 @@ function bunnyvideo_delete_instance($id)
 
     // Limpa os registros de progresso de conclusão
     $DB->delete_records('bunnyvideo_progress', array('bunnyvideoid' => $bunnyvideo->id));
+    bunnyvideo_grade_item_delete($bunnyvideo);
 
     // Exclusão padrão - O Moodle lida com dados de conclusão relacionados etc.
     $DB->delete_records('bunnyvideo', array('id' => $bunnyvideo->id));
@@ -314,7 +554,9 @@ function bunnyvideo_supports($feature)
         case FEATURE_SHOW_DESCRIPTION:
             return true;
         case FEATURE_GRADE_HAS_GRADE:
-            return false; // Sem notas
+            return true;
+        case FEATURE_GRADE_OUTCOMES:
+            return true;
         case FEATURE_GROUPS:
             return false; // Sem suporte a grupos
         case FEATURE_GROUPINGS:

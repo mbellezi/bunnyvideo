@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<XMLDB PATH="mod/bunnyvideo/db" VERSION="2026022718" COMMENT="Arquivo XMLDB para Moodle mod_bunnyvideo"
+<XMLDB PATH="mod/bunnyvideo/db" VERSION="2026022720" COMMENT="Arquivo XMLDB para Moodle mod_bunnyvideo"
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:noNamespaceSchemaLocation="../../../lib/xmldb/xmldb.xsd"
 >
@@ -13,6 +13,7 @@
         <FIELD NAME="introformat" TYPE="int" LENGTH="4" NOTNULL="true" DEFAULT="1" SEQUENCE="false"/>
         <FIELD NAME="embedcode" TYPE="text" NOTNULL="true" SEQUENCE="false" COMMENT="Código HTML de incorporação do Bunny"/>
         <FIELD NAME="completionpercent" TYPE="int" LENGTH="3" NOTNULL="false" DEFAULT="0" SEQUENCE="false" COMMENT="Porcentagem necessária para a conclusão (0-100). 0 ou NULL significa desabilitado."/>
+        <FIELD NAME="grade" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="100" SEQUENCE="false" COMMENT="Nota máxima da atividade. 0 desabilita notas; valor negativo indica escala."/>
         <FIELD NAME="timecreated" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
         <FIELD NAME="timemodified" TYPE="int" LENGTH="10" NOTNULL="true" DEFAULT="0" SEQUENCE="false"/>
       </FIELDS>

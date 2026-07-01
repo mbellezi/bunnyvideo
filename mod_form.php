@@ -41,6 +41,7 @@ class mod_bunnyvideo_mod_form extends moodleform_mod
         //-------------------------------------------------------------------------------
         // Elementos padrão do Moodle para módulos (visibilidade, grupos, etc.)
         // Esta chamada é importante e deve permanecer.
+        $this->standard_grading_coursemodule_elements();
         $this->standard_coursemodule_elements();
 
         // Adiciona mensagem de aviso sobre conclusão automática apenas
@@ -83,6 +84,10 @@ class mod_bunnyvideo_mod_form extends moodleform_mod
 
         // Remove o campo antigo que era usado pela checkbox, caso ainda exista nos dados crus do POST
         unset($data->completionwhenpercentreached);
+
+        if (!isset($data->grade)) {
+            $data->grade = 100;
+        }
 
         // FATAL BUG FIX: O Moodle 4.x processa as regras como checkboxes no form. Como usamos
         // texto, ele "esquece" de adicionar a nossa regra à lista oficial que salva no banco de dados.

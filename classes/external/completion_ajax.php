@@ -57,10 +57,10 @@ class completion_ajax extends \external_api
             );
         }
 
-        // Verifica o estado atual da conclusão
-        $currentcompletion = $completion->get_data($cm, $USER->id, true); // Obtém o estado atual, ignora o cache
+        // Verifica o estado atual da conclusão.
+        $currentcompletion = $completion->get_data($cm, false, $USER->id);
 
-        if ($currentcompletion->completionstate == COMPLETION_COMPLETE) {
+        if (bunnyvideo_completion_state_is_complete($currentcompletion->completionstate)) {
             // Já concluído, nada a fazer. Retorna sucesso.
             \core\session\manager::write_close(); // Libera o bloqueio da sessão mais cedo
             return array('success' => true, 'message' => 'Já concluído.');
@@ -69,34 +69,14 @@ class completion_ajax extends \external_api
         // --- Registra o progresso na tabela bunnyvideo_progress ---
         // Isso é necessário ANTES de chamar update_state() porque
         // update_state() chama get_state() que verifica bunnyvideo_progress.
-        $progressrecord = $DB->get_record('bunnyvideo_progress', [
-            'bunnyvideoid' => $bunnyvideo->id,
-            'userid' => $USER->id,
-        ]);
-
-        if ($progressrecord) {
-            if ($progressrecord->completionmet != 1) {
-                $progressrecord->completionmet = 1;
-                $progressrecord->timemodified = time();
-                $DB->update_record('bunnyvideo_progress', $progressrecord);
-            }
-        } else {
-            $progress = new \stdClass();
-            $progress->bunnyvideoid = $bunnyvideo->id;
-            $progress->userid = $USER->id;
-            $progress->completionmet = 1;
-            $progress->lastposition = 0;
-            $progress->positionmodified = 0;
-            $progress->timewatched = 0;
-            $progress->timemodified = time();
-            $DB->insert_record('bunnyvideo_progress', $progress);
-        }
+        bunnyvideo_set_progress_completion($bunnyvideo->id, $USER->id, true);
 
         // --- Marca a atividade como concluída ---
         // Agora update_state() chamará get_state() que encontrará o registro
         // em bunnyvideo_progress e retornará COMPLETION_COMPLETE.
         try {
             $completion->update_state($cm, COMPLETION_COMPLETE, $USER->id);
+            bunnyvideo_update_completion_grade($bunnyvideo, $USER->id, true);
             \core\session\manager::write_close();
             return array('success' => true);
         } catch (\Exception $e) {
@@ -249,16 +229,29 @@ class completion_ajax extends \external_api
             ', userid: ' . $params['userid'] .
             ', newstate: ' . $params['newstate'], DEBUG_DEVELOPER);
 
-        // Verificar o estado atual de conclusão
-        $currentdata = $completion->get_data($cm, true, $params['userid']); // Forçar recarregamento
+        // Verificar o estado atual de conclusão.
+        $currentdata = $completion->get_data($cm, false, $params['userid']);
         debugging('BunnyVideo - Estado atual: ' . $currentdata->completionstate .
             ' - Tentando alterar para: ' . $params['newstate'], DEBUG_DEVELOPER);
         // Mapeia o parâmetro newstate para as constantes de conclusão do Moodle
-        $completionstate = ($newstate == 1) ? COMPLETION_COMPLETE : COMPLETION_INCOMPLETE;
+        $completionstate = ($params['newstate'] == 1) ? COMPLETION_COMPLETE : COMPLETION_INCOMPLETE;
+        $wascomplete = bunnyvideo_completion_state_is_complete($currentdata->completionstate);
+        $completed = ($params['newstate'] == 1);
+        $bunnyvideo = $DB->get_record('bunnyvideo', array('id' => $cm->instance), '*', MUST_EXIST);
 
         try {
+            bunnyvideo_set_progress_completion($bunnyvideo->id, $params['userid'], $completed);
+
             // Atualiza o estado de conclusão usando a API do Moodle
-            $completion->update_state($cm, $completionstate, $userid, true);
+            $completion->update_state($cm, $completionstate, $params['userid'], true);
+
+            if ($completed) {
+                if (!$wascomplete) {
+                    bunnyvideo_update_completion_grade($bunnyvideo, $params['userid'], true);
+                }
+            } else {
+                bunnyvideo_update_completion_grade($bunnyvideo, $params['userid'], false);
+            }
 
             // Limpa o cache de conclusão
             $cache = \cache::make('core', 'completion');

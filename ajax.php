@@ -82,37 +82,18 @@ if ($action === 'save_position' || $action === 'saveposition') {
     } else {
         // Salva o estado atual para verificar se já está concluído
         $current = $completion->get_data($cm, false, $USER->id);
-        $was_complete = $current->completionstate == COMPLETION_COMPLETE;
+        $was_complete = bunnyvideo_completion_state_is_complete($current->completionstate);
 
-        // Registra o progresso na tabela bunnyvideo_progress ANTES de chamar update_state.
-        // Isso é necessário porque update_state() chama get_state() da classe custom_completion,
-        // que verifica bunnyvideo_progress para determinar se o aluno completou.
-        $progressrecord = $DB->get_record('bunnyvideo_progress', [
-            'bunnyvideoid' => $bunnyvideo->id,
-            'userid' => $USER->id,
-        ]);
-
-        if ($progressrecord) {
-            if ($progressrecord->completionmet != 1) {
-                $progressrecord->completionmet = 1;
-                $progressrecord->timemodified = time();
-                $DB->update_record('bunnyvideo_progress', $progressrecord);
-            }
-        } else {
-            $progress = new stdClass();
-            $progress->bunnyvideoid = $bunnyvideo->id;
-            $progress->userid = $USER->id;
-            $progress->completionmet = 1;
-            $progress->lastposition = 0;
-            $progress->positionmodified = 0;
-            $progress->timewatched = 0;
-            $progress->timemodified = time();
-            $DB->insert_record('bunnyvideo_progress', $progress);
-        }
+        // Registra o progresso ANTES de chamar update_state(), porque a regra de conclusão
+        // personalizada consulta bunnyvideo_progress para decidir se deve completar.
+        bunnyvideo_set_progress_completion($bunnyvideo->id, $USER->id, true);
 
         // Agora chama update_state() — o Moodle chamará get_state() que encontrará
         // o registro em bunnyvideo_progress e retornará COMPLETION_COMPLETE.
         $completion->update_state($cm, COMPLETION_COMPLETE);
+        if (!$was_complete) {
+            bunnyvideo_update_completion_grade($bunnyvideo, $USER->id, true);
+        }
         $response['success'] = true;
 
         // Mensagem diferente com base em se já estava concluído
