@@ -87,6 +87,7 @@ class completion_ajax extends \external_api
             $progress->completionmet = 1;
             $progress->lastposition = 0;
             $progress->positionmodified = 0;
+            $progress->timewatched = 0;
             $progress->timemodified = time();
             $DB->insert_record('bunnyvideo_progress', $progress);
         }
@@ -130,7 +131,8 @@ class completion_ajax extends \external_api
         return new \external_function_parameters(
             array(
                 'cmid' => new \external_value(PARAM_INT, 'O ID do módulo do curso'),
-                'position' => new \external_value(PARAM_FLOAT, 'Posição atual do vídeo em segundos')
+                'position' => new \external_value(PARAM_FLOAT, 'Posição atual do vídeo em segundos'),
+                'timewatched' => new \external_value(PARAM_FLOAT, 'Tempo total assistido em segundos', VALUE_DEFAULT, -1)
             )
         );
     }
@@ -141,13 +143,14 @@ class completion_ajax extends \external_api
      * @param float $position Posição atual em segundos.
      * @return array Status de sucesso e posição salva.
      */
-    public static function save_position($cmid, $position)
+    public static function save_position($cmid, $position, $timewatched = -1)
     {
         global $USER, $DB;
 
         $params = self::validate_parameters(self::save_position_parameters(), array(
             'cmid' => $cmid,
-            'position' => $position
+            'position' => $position,
+            'timewatched' => $timewatched
         ));
 
         $cm = get_coursemodule_from_id('bunnyvideo', $params['cmid'], 0, false, MUST_EXIST);
@@ -157,14 +160,21 @@ class completion_ajax extends \external_api
         require_capability('mod/bunnyvideo:view', $context);
 
         $bunnyvideo = $DB->get_record('bunnyvideo', array('id' => $cm->instance), '*', MUST_EXIST);
-        $savedposition = bunnyvideo_save_playback_position($bunnyvideo->id, $USER->id, $params['position']);
+        $savedtimewatched = $params['timewatched'] >= 0 ? $params['timewatched'] : null;
+        $savedposition = bunnyvideo_save_playback_position($bunnyvideo->id, $USER->id, $params['position'], $savedtimewatched);
 
         \core\session\manager::write_close();
-        return array(
+        $result = array(
             'success' => true,
             'position' => $savedposition,
             'message' => 'Position saved'
         );
+
+        if ($savedtimewatched !== null) {
+            $result['timewatched'] = max(0, (int) round($savedtimewatched));
+        }
+
+        return $result;
     }
 
     /**
@@ -177,6 +187,7 @@ class completion_ajax extends \external_api
             array(
                 'success' => new \external_value(PARAM_BOOL, 'Verdadeiro se a posição foi salva'),
                 'position' => new \external_value(PARAM_INT, 'Posição salva em segundos'),
+                'timewatched' => new \external_value(PARAM_INT, 'Tempo total assistido em segundos', VALUE_OPTIONAL),
                 'message' => new \external_value(PARAM_TEXT, 'Mensagem opcional', VALUE_OPTIONAL)
             )
         );

@@ -64,8 +64,9 @@ function bunnyvideo_view($bunnyvideo, $cm, $context, $options = null)
     $progressrecord = $DB->get_record('bunnyvideo_progress', [
         'bunnyvideoid' => $bunnyvideo->id,
         'userid' => $USER->id,
-    ], 'lastposition');
+    ], 'lastposition, timewatched');
     $lastposition = $progressrecord ? (int) $progressrecord->lastposition : 0;
+    $timewatched = $progressrecord ? (int) $progressrecord->timewatched : 0;
 
     // Adiciona botão de alternância para professores/admins
     if ($canmanagecompletion && $cm->completion != COMPLETION_TRACKING_NONE) {
@@ -103,6 +104,7 @@ function bunnyvideo_view($bunnyvideo, $cm, $context, $options = null)
         'completionPercent' => $bunnyvideo->completionpercent > 0 ? (int) $bunnyvideo->completionpercent : 0,
         'contextid' => $context->id,
         'lastPosition' => $lastposition,
+        'timeWatched' => $timewatched,
     ];
 
     // --- Geração do HTML usando $OUTPUT (Renderer Padrão) ---
@@ -184,13 +186,15 @@ function bunnyvideo_view($bunnyvideo, $cm, $context, $options = null)
  * @param int $bunnyvideoid BunnyVideo instance ID.
  * @param int $userid User ID.
  * @param float|int $position Current playback position in seconds.
+ * @param float|int|null $timewatched Total watched time in seconds.
  * @return int Saved position in whole seconds.
  */
-function bunnyvideo_save_playback_position($bunnyvideoid, $userid, $position)
+function bunnyvideo_save_playback_position($bunnyvideoid, $userid, $position, $timewatched = null)
 {
     global $DB;
 
     $position = max(0, (int) round($position));
+    $timewatched = $timewatched === null ? null : max(0, (int) round($timewatched));
     $now = time();
 
     $progressrecord = $DB->get_record('bunnyvideo_progress', [
@@ -201,6 +205,9 @@ function bunnyvideo_save_playback_position($bunnyvideoid, $userid, $position)
     if ($progressrecord) {
         $progressrecord->lastposition = $position;
         $progressrecord->positionmodified = $now;
+        if ($timewatched !== null) {
+            $progressrecord->timewatched = max((int) $progressrecord->timewatched, $timewatched);
+        }
         $DB->update_record('bunnyvideo_progress', $progressrecord);
     } else {
         $progress = new stdClass();
@@ -209,6 +216,7 @@ function bunnyvideo_save_playback_position($bunnyvideoid, $userid, $position)
         $progress->completionmet = 0;
         $progress->lastposition = $position;
         $progress->positionmodified = $now;
+        $progress->timewatched = $timewatched === null ? 0 : $timewatched;
         $progress->timemodified = 0;
         $DB->insert_record('bunnyvideo_progress', $progress);
     }

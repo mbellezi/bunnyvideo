@@ -77,7 +77,10 @@ window.BunnyVideoHandler = {
     playerReady: false,
     currentPosition: 0,
     currentDuration: 0,
+    previousTimeWatched: 0,
+    totalTimeWatched: 0,
     lastSavedPosition: null,
+    lastSavedTimeWatched: null,
     resumeAttempted: false,
     positionEventsAttached: false,
     
@@ -205,6 +208,39 @@ window.BunnyVideoHandler = {
         }
     },
 
+    // Tempo total assistido: histórico salvo no banco + tempo real desta sessão.
+    getTotalTimeWatched: function() {
+        this.totalTimeWatched = this.previousTimeWatched + this.actualTimeWatched;
+        return this.totalTimeWatched;
+    },
+
+    // Verifica conclusão usando o tempo total acumulado, nunca apenas a posição no vídeo.
+    checkCompletionThreshold: function(duration, source) {
+        if (!this.config || this.config.completionPercent <= 0 || this.completionSent) {
+            return false;
+        }
+
+        duration = parseFloat(duration || this.currentDuration);
+        if (isNaN(duration) || duration <= 0) {
+            return false;
+        }
+
+        var totalTimeWatched = this.getTotalTimeWatched();
+        var percentOfTotalTimeWatched = (totalTimeWatched / duration) * 100;
+        var comparisonPercent = (this.config.completionPercent === 100)
+            ? Math.round(percentOfTotalTimeWatched)
+            : percentOfTotalTimeWatched;
+
+        if (comparisonPercent >= this.config.completionPercent) {
+            bunnyVideoLog('LIMITE DE CONCLUSÃO ATINGIDO com base no tempo total assistido' +
+                    (source ? ' [' + source + ']' : '') + '!', null, 'success');
+            this.sendCompletion();
+            return true;
+        }
+
+        return false;
+    },
+
     // Salva a posição atual sem alterar completionmet.
     savePlaybackPosition: function(force) {
         if (!this.config || !this.config.cmid) {
@@ -212,7 +248,12 @@ window.BunnyVideoHandler = {
         }
 
         var position = Math.max(0, Math.round(parseFloat(this.currentPosition) || 0));
-        if (!force && this.lastSavedPosition !== null && Math.abs(position - this.lastSavedPosition) < 1) {
+        var timeWatched = Math.max(0, Math.round(this.getTotalTimeWatched()));
+        if (!force &&
+                this.lastSavedPosition !== null &&
+                this.lastSavedTimeWatched !== null &&
+                Math.abs(position - this.lastSavedPosition) < 1 &&
+                Math.abs(timeWatched - this.lastSavedTimeWatched) < 1) {
             return;
         }
 
@@ -221,6 +262,7 @@ window.BunnyVideoHandler = {
         params.append('action', 'save_position');
         params.append('cmid', this.config.cmid);
         params.append('position', position);
+        params.append('timewatched', timeWatched);
         params.append('sesskey', M.cfg.sesskey);
 
         if (force && navigator.sendBeacon) {
@@ -231,6 +273,7 @@ window.BunnyVideoHandler = {
 
                 if (navigator.sendBeacon(ajaxUrl, beaconData)) {
                     this.lastSavedPosition = position;
+                    this.lastSavedTimeWatched = timeWatched;
                     bunnyVideoLog('Posição enviada ao sair da página: ' + this.formatTime(position), null, 'debug');
                     return;
                 }
@@ -248,6 +291,7 @@ window.BunnyVideoHandler = {
         xhr.onload = function() {
             if (xhr.status === 200) {
                 self.lastSavedPosition = position;
+                self.lastSavedTimeWatched = timeWatched;
                 bunnyVideoLog('Posição salva: ' + self.formatTime(position), null, 'debug');
             } else {
                 bunnyVideoLog('Falha ao salvar posição, status: ' + xhr.status, null, 'warn');
@@ -261,6 +305,7 @@ window.BunnyVideoHandler = {
             xhr.send(params.toString());
             if (force) {
                 this.lastSavedPosition = position;
+                this.lastSavedTimeWatched = timeWatched;
             }
         } catch (e) {
             bunnyVideoLog('Erro ao enviar posição do vídeo:', e, 'warn');
@@ -406,23 +451,17 @@ window.BunnyVideoHandler = {
                 // Rastreia o tempo real assistido com segmentos
                 this.updateWatchedTime(currentTimeRounded);
                 
-                // Calcula a porcentagem do tempo real assistido
-                var percentOfActualTimeWatched = (this.actualTimeWatched / duration) * 100;
+                // Calcula a porcentagem do tempo total assistido, incluindo sessões anteriores.
+                var totalTimeWatched = this.getTotalTimeWatched();
+                var percentOfTotalTimeWatched = (totalTimeWatched / duration) * 100;
                 
                 // Registra informações do tempo real assistido
-                bunnyVideoLog('Tempo real assistido: ' + this.formatTime(this.actualTimeWatched) + 
-                       ' (' + percentOfActualTimeWatched.toFixed(1) + '% de ' + this.formatTime(duration) + ')', 
+                bunnyVideoLog('Tempo real assistido: ' + this.formatTime(totalTimeWatched) +
+                       ' total (' + this.formatTime(this.actualTimeWatched) + ' nesta sessão, ' +
+                       percentOfTotalTimeWatched.toFixed(1) + '% de ' + this.formatTime(duration) + ')',
                        null, BunnyVideoDebugConfig.debugLevel >= 3 ? 'debug' : 'info');
-                
-                // Arredonda a porcentagem calculada APENAS se a meta for 100% para evitar problemas de precisão
-                var comparisonPercent = (this.config.completionPercent === 100) ? Math.round(percentOfActualTimeWatched) : percentOfActualTimeWatched;
 
-                // Usa APENAS o tempo real assistido para a conclusão, não maxPercentReached
-                // Compara usando o valor potencialmente arredondado
-                if (comparisonPercent >= this.config.completionPercent) {
-                    bunnyVideoLog('LIMITE DE CONCLUSÃO ATINGIDO com base no tempo real assistido!', null, 'success');
-                    this.sendCompletion();
-                }
+                this.checkCompletionThreshold(duration, 'timeupdate');
             }
         } catch (e) {
             bunnyVideoLog('Erro ao processar timeupdate:', e, 'error');
@@ -584,9 +623,12 @@ window.BunnyVideoHandler = {
                     self.updateCurrentPlaybackPosition(currentTime, duration);
                     
                     if (duration > 0) {
+                        var currentTimeRounded = Math.round(currentTime / BunnyVideoDebugConfig.timeTrackingResolution) *
+                                BunnyVideoDebugConfig.timeTrackingResolution;
                         var percentWatched = (currentTime / duration) * 100;
                         var previousMax = self.maxPercentReached;
                         self.maxPercentReached = Math.max(self.maxPercentReached, percentWatched);
+                        self.updateWatchedTime(currentTimeRounded);
                         
                         // Registra mudanças significativas
                         if (Math.floor(self.maxPercentReached) > Math.floor(previousMax)) {
@@ -595,11 +637,7 @@ window.BunnyVideoHandler = {
                                     null, 'info');
                         }
                         
-                        // Verifica o limite de conclusão
-                        if (self.config.completionPercent > 0 && !self.completionSent && self.maxPercentReached >= self.config.completionPercent) {
-                            bunnyVideoLog('[POLL] LIMITE DE CONCLUSÃO ATINGIDO!', null, 'success');
-                            self.sendCompletion();
-                        }
+                        self.checkCompletionThreshold(duration, 'polling');
                     }
                 }
             } catch (e) {
@@ -832,11 +870,14 @@ window.BunnyVideoHandler = {
             });
             
             self.playerInstance.on('ended', function() {
-                // bunnyVideoLog('Evento ended do player', null, 'success');
-                // self.maxPercentReached = 100;
-                // if (self.config.completionPercent > 0) {
-                //     self.sendCompletion();
-                // }
+                bunnyVideoLog('Evento ended do player - verificando tempo total assistido', null, 'success');
+                if (self.currentPosition > 0) {
+                    var currentTimeRounded = Math.round(self.currentPosition / BunnyVideoDebugConfig.timeTrackingResolution) *
+                            BunnyVideoDebugConfig.timeTrackingResolution;
+                    self.updateWatchedTime(currentTimeRounded);
+                }
+                self.savePlaybackPosition(false);
+                self.checkCompletionThreshold(self.currentDuration, 'ended');
             });
             
             // Inicia polling como backup
@@ -921,11 +962,14 @@ window.BunnyVideoHandler = {
                 });
                 
                 self.playerInstance.on('ended', function() {
-                    bunnyVideoLog('Evento ended do player - definindo 100% assistido', null, 'success');
-                    self.maxPercentReached = 100;
-                    if (self.config.completionPercent > 0) {
-                        self.sendCompletion();
+                    bunnyVideoLog('Evento ended do player - verificando tempo total assistido', null, 'success');
+                    if (self.currentPosition > 0) {
+                        var currentTimeRounded = Math.round(self.currentPosition / BunnyVideoDebugConfig.timeTrackingResolution) *
+                                BunnyVideoDebugConfig.timeTrackingResolution;
+                        self.updateWatchedTime(currentTimeRounded);
                     }
+                    self.savePlaybackPosition(false);
+                    self.checkCompletionThreshold(self.currentDuration, 'ended');
                 });
                 
                 // Inicia polling como backup
@@ -1020,11 +1064,14 @@ window.BunnyVideoHandler = {
             });
             
             customPlayer.on('ended', function() {
-                bunnyVideoLog('Evento ended do player personalizado - definindo 100% assistido', null, 'success');
-                self.maxPercentReached = 100;
-                if (self.config.completionPercent > 0) {
-                    self.sendCompletion();
+                bunnyVideoLog('Evento ended do player personalizado - verificando tempo total assistido', null, 'success');
+                if (self.currentPosition > 0) {
+                    var currentTimeRounded = Math.round(self.currentPosition / BunnyVideoDebugConfig.timeTrackingResolution) *
+                            BunnyVideoDebugConfig.timeTrackingResolution;
+                    self.updateWatchedTime(currentTimeRounded);
                 }
+                self.savePlaybackPosition(false);
+                self.checkCompletionThreshold(self.currentDuration, 'ended');
             });
             
             // Inicia polling como backup
@@ -1039,6 +1086,9 @@ window.BunnyVideoHandler = {
     // Função principal de inicialização chamada do PHP
     init: function(cfg) {
         this.config = cfg;
+        this.previousTimeWatched = Math.max(0, parseFloat((cfg && cfg.timeWatched) || 0));
+        this.totalTimeWatched = this.previousTimeWatched;
+        this.lastSavedTimeWatched = this.previousTimeWatched;
         bunnyVideoLog('Inicializando BunnyVideoHandler com config:', cfg, 'info');
         
         if (!this.config || !this.config.cmid) {

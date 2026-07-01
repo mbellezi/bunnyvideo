@@ -62,10 +62,14 @@ require_capability('mod/bunnyvideo:view', $context);
 
 if ($action === 'save_position' || $action === 'saveposition') {
     $position = required_param('position', PARAM_FLOAT);
-    $savedposition = bunnyvideo_save_playback_position($bunnyvideo->id, $USER->id, $position);
+    $timewatched = optional_param('timewatched', null, PARAM_FLOAT);
+    $savedposition = bunnyvideo_save_playback_position($bunnyvideo->id, $USER->id, $position, $timewatched);
 
     $response['success'] = true;
     $response['position'] = $savedposition;
+    if ($timewatched !== null) {
+        $response['timewatched'] = max(0, (int) round($timewatched));
+    }
     $response['message'] = 'Position saved';
 
     \core\session\manager::write_close();
@@ -101,6 +105,7 @@ if ($action === 'save_position' || $action === 'saveposition') {
             $progress->completionmet = 1;
             $progress->lastposition = 0;
             $progress->positionmodified = 0;
+            $progress->timewatched = 0;
             $progress->timemodified = time();
             $DB->insert_record('bunnyvideo_progress', $progress);
         }
